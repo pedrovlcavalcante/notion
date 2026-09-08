@@ -4,12 +4,13 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
-from datetime import datetime, timedelta
+from datetime import datetime
 import psutil, time
 from decimal import Decimal
 import tkinter as tk
 from tkinter import messagebox
 from notion import procura, cria_pedido, login_mercus, transportadoras, equipe
+import logging
 
 def selenium_esta_rodando():
     print('func executado no while')
@@ -28,6 +29,26 @@ def selenium_esta_rodando():
             continue
     return False
 
+# Configura o log para gravar apenas a data e hora no arquivo 'datas.log'
+def log():
+    logging.basicConfig(
+        filename='datas.log', 
+        level=logging.INFO, 
+        format='%(asctime)s', 
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+
+    # Grava o registro atual
+    logging.info('')
+
+def verifica_dia():
+    with open("datas.log", "r") as file:
+        ultima = file.readlines()[-1].replace("\n", "")
+    ultima_data = datetime.strptime(ultima, "%Y-%m-%d %H:%M:%S").date()
+    hoje = datetime.today().date()
+    diferenca = hoje - ultima_data
+    return diferenca
+
 while selenium_esta_rodando():
     for i in range(4):
         pontos = "." * i
@@ -43,9 +64,13 @@ chrome_options.add_argument("--headless=new")
 # Initialize the WebDriver with the specified options
 driver = webdriver.Chrome(options=chrome_options)
 
+diferenca = verifica_dia()
+
 periodo_final = datetime.strftime(datetime.today().date(), "%d/%m/%Y")
-data_inicial = datetime.today().date() - timedelta(days=1)
+data_inicial = datetime.today().date() - diferenca
 periodo_incial = datetime.strftime(data_inicial, "%d/%m/%Y")
+
+log()
 
 print(periodo_final, periodo_incial)
 base_url = 'https://app.mercos.com/384882/'
@@ -99,6 +124,12 @@ def busca_pedidos():
             data_pedido = datetime.strptime(extrai_data, "%d/%m/%Y").date().isoformat()
             boleto = False
             transportadora = transportadoras(transportadora_mercos)
+            tabela = driver.find_element(By.ID, "tabela_itens_pedido").text
+            # try:
+            #     df = pd.read_html(tabela, )
+            #     print(df.head())
+            # except Exception as e:
+            #     print(f"Não foi possível ler a tabela: {e}")
             time = equipe(vendedor)
             if ('/' in cond_pagamento) or (cond_pagamento in tipos_boleto):
                 boleto = True

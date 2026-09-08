@@ -69,7 +69,7 @@ def color_rows(row):
         '1ª ANDAR'.upper():'#EAAD34',
         'SEPARAÇÃO LOJA':'#F8FF1F',
         'SEPARAÇÃO JACARECANGA':'#F8FF1F',
-        'Fila Confêrencia'.upper():'#DFAAD4',
+        'Fila Conferência'.upper():'#DFAAD4',
         'Conferência'.upper():'#F395E8',
         '2ª CONFERENCIA':'#F395E8',
         'PENDÊNCIA PRODUTOS':'#FDAE54',
