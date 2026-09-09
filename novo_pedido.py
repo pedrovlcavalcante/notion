@@ -5,30 +5,14 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 from datetime import datetime
-import psutil, time
+import time
 from decimal import Decimal
 import tkinter as tk
 from tkinter import messagebox
 from notion import procura, cria_pedido, cria_bloco, login_mercus, transportadoras, equipe
+from dependencias import selenium_esta_rodando
 import logging
 import pandas as pd
-
-def selenium_esta_rodando():
-    print('func executado no while')
-    # Nomes dos executáveis comuns de WebDrivers
-    drivers_selenium = ["chromedriver", "geckodriver", "msedgedriver"]
-    
-    for proc in psutil.process_iter(['name']):
-        try:
-            # Converte o nome para minúsculo para evitar problemas no Windows/Linux
-            nome_processo = proc.info['name'].lower()
-            
-            # Se encontrar o driver na lista de processos ativos
-            if any(driver in nome_processo for driver in drivers_selenium):
-                return True
-        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
-            continue
-    return False
 
 # Configura o log para gravar apenas a data e hora no arquivo 'datas.log'
 def log():

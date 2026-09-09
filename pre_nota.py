@@ -10,10 +10,10 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
-import psutil
 import time
 from notion import login_mercus
 from dotenv import load_dotenv
+from dependencias import selenium_esta_rodando, regras_preco
 import os
 
 load_dotenv("credentials.env")
@@ -21,40 +21,8 @@ app_key = os.getenv("APP_KEY")
 app_secret = os.getenv("APP_SECRET")
 
 grupo_zigg = ["ZIGG-ZAGG DISTRIBUIDORA - FILIAL", "ZIGG-ZAGG DISTRIBUIDORA", "BELA BIJU"]
-regras_preco = {
-    "CE": {
-        (0, 2999.99): 50,
-        (3000, float("inf")): 0,
-    },
-    "nordeste": {
-        "10": {(2000, 2999.99): 180, (3000, 3999.99): 150, (4000, 4999.99): 120, (5000, float("inf")): 0},
-        "40": {(2000, 2999.99): 120, (3000, 3499.99): 90, (3500, float("inf")): 0}
-    },
-    "norte": {
-        "10": {(3000, 3999.99): 260, (4000, 4999.99): 240, (5000, 5999.99): 220, (6000, 6999.99): 200, (7000, 7999.99): 170, (8000, 8999.99): 150, (9000, float("inf")): 0},
-        "40": {(2000, 2999.99): 250, (3000, 3999.99): 200, (4000, 4999.99): 180, (5000, 5999.99): 150, (6000, 7499.99): 120, (7500, float("inf")): 0},
-    },
-    "outras": {
-        "10": {(2000, 2999.99): 200, (3000, 3999.99): 170, (4000, 4999.99): 150, (5000, 5999.99): 120, (6000, 6999.99): 110, (7000, float("inf")): 0},
-        "40": {(2000, 2999.99): 150, (3000, 3999.99): 120, (4000, 4999.99): 100, (5000, 5499.99): 80, (5500, float("inf")): 0},
-    },
-}
 
-def selenium_esta_rodando():
-    # Nomes dos executáveis comuns de WebDrivers
-    drivers_selenium = ["chromedriver", "geckodriver", "msedgedriver"]
-    
-    for proc in psutil.process_iter(['name']):
-        try:
-            # Converte o nome para minúsculo para evitar problemas no Windows/Linux
-            nome_processo = proc.info['name'].lower()
-            
-            # Se encontrar o driver na lista de processos ativos
-            if any(driver in nome_processo for driver in drivers_selenium):
-                return True
-        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
-            continue
-    return False
+
 
 def inclui_parcela(parcela):
     url = 'https://app.omie.com.br/api/v1/geral/parcelas/'
@@ -469,6 +437,7 @@ def info_pedido(pedido, valor_pedido):
                 break
     texto_completo = f"INFORMAÇÕES PEDIDO: {pedido}"            
     pedido_formatado = f"R$ {valor_pedido:,.2f}"
+    
     print("=" * 50)
     print(f"{texto_completo:^50}")
     print("=" * 50)
@@ -657,5 +626,4 @@ def executa():
     print("Encerrando execução")
 
 if __name__=="__main__":
-
     executa()

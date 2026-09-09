@@ -12,8 +12,8 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-import psutil
 from notion import login_mercus, seta_nf, id_pedido_notion, atualiza_dados_faturamento, equipe
+from dependencias import selenium_esta_rodando
 
 fila_tarefas = queue.Queue()
 
@@ -29,22 +29,6 @@ def dados_atualizados_pedido(driver):
     decimal = Decimal(valor_separado)
     valor_ajustado = float(decimal)
     return (qtd_itens, qtd_total, valor_ajustado, link_mercos, vendedor, time)
-
-def selenium_esta_rodando():
-    # Nomes dos executáveis comuns de WebDrivers
-    drivers_selenium = ["chromedriver", "geckodriver", "msedgedriver"]
-    
-    for proc in psutil.process_iter(['name']):
-        try:
-            # Converte o nome para minúsculo para evitar problemas no Windows/Linux
-            nome_processo = proc.info['name'].lower()
-            
-            # Se encontrar o driver na lista de processos ativos
-            if any(driver in nome_processo for driver in drivers_selenium):
-                return True
-        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
-            continue
-    return False
 
 def download_danfe(danfe_url, numero_nf, pedido):
     url = danfe_url
