@@ -161,7 +161,7 @@ def procura(pedido):
 
     return pesquisa
 
-def cria_pedido(pedido, itens, quantidade, boleto, transportadora, cliente, vendedor, link_mercos, data_pedido, nome_excursao, equipe, valor, source=data_source_id):
+def cria_pedido(pedido, itens, quantidade, boleto, transportadora, cliente, vendedor, link_mercos, data_pedido, nome_excursao, equipe, valor, progresso, source=data_source_id):
     url = 'https://api.notion.com/v1/pages'
     headers = {
         "Notion-Version": "2026-03-11",
@@ -179,7 +179,7 @@ def cria_pedido(pedido, itens, quantidade, boleto, transportadora, cliente, vend
                 ]
             },
             "PROGRESSO": {
-                "status":{"name": "EM ANÁLISE"}
+                "status":{"name": progresso}
             },
             "ITENS NO PEDIDO": {
                 "id": "MiZy",
@@ -252,6 +252,35 @@ def cria_pedido(pedido, itens, quantidade, boleto, transportadora, cliente, vend
     else:
         print(f"Pedido {pedido} criado com sucesso")
         return novo_pedido
+
+def cria_bloco(page_id, linhas):
+    url = f'https://api.notion.com/v1/blocks/{page_id}/children'
+    headers = {
+        "Notion-Version": "2026-03-11",
+        "Authorization": f"Bearer {token}",
+    }
+
+    children = []
+    if len(linhas > 100):
+        children = [{"bulleted_list_item":{"rich_text":[{"text":{"content":"+100 ITENS: VER NO PEDIDO"}}]}}]
+    for linha in linhas: 
+        children.append({"bulleted_list_item":{"rich_text":[{"text":{"content":linha}}]}})
+
+    payload = {
+    "children":children,
+    "position":{
+        "type":"start"
+    }
+    }
+    conteudo = requests.patch(url, headers=headers, json=payload)
+    if conteudo.status_code == 400:
+        print("Erro ao criar pedido")
+        print(conteudo.json())
+        return conteudo
+    else:
+        print(f"Conteudo criado com sucesso")
+        # print(conteudo.json())
+        return conteudo
 
 def coletados(data, source=data_source_id):
     dia = datetime.strptime(data, "%d/%m/%Y")
