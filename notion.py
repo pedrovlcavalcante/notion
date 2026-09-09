@@ -261,10 +261,11 @@ def cria_bloco(page_id, linhas):
     }
 
     children = []
-    if len(linhas > 100):
+    if len(linhas) > 100:
         children = [{"bulleted_list_item":{"rich_text":[{"text":{"content":"+100 ITENS: VER NO PEDIDO"}}]}}]
-    for linha in linhas: 
-        children.append({"bulleted_list_item":{"rich_text":[{"text":{"content":linha}}]}})
+    else:
+        for linha in linhas: 
+            children.append({"bulleted_list_item":{"rich_text":[{"text":{"content":linha}}]}})
 
     payload = {
     "children":children,
