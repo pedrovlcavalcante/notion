@@ -4,13 +4,14 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
+from bs4 import BeautifulSoup
 from datetime import datetime
 import time
 from decimal import Decimal
 import tkinter as tk
 from tkinter import messagebox
 from notion import procura, cria_pedido, cria_bloco, login_mercus, transportadoras, equipe
-from dependencias import selenium_esta_rodando
+from dependencias import selenium_esta_rodando, Pedido
 import logging
 import pandas as pd
 
@@ -78,14 +79,14 @@ def busca_pedidos():
 )
     linhas = driver.find_elements(By.XPATH, '//*[@id="componente-de-tabela-2"]/table/tbody/tr')
     for linha in linhas:
-        pedido = linha.find_element(By.TAG_NAME, "a")
-        item = pedido.text.replace("#","")
-        pesquisa = procura(item)
+        pedido_mercos = linha.find_element(By.TAG_NAME, "a")
+        numero_pedido_mercos = pedido_mercos.text.replace("#","")
+        pesquisa = procura(numero_pedido_mercos)
         link_mercos = driver.current_url
         if len(pesquisa.json()['results']) == 0:
-            print(f"Criando Pedido {item} no Notion")
-            driver.execute_script("arguments[0].scrollIntoView(true);", pedido)
-            pedido.click()
+            print(f"Criando Pedido {numero_pedido_mercos} no Notion")
+            driver.execute_script("arguments[0].scrollIntoView(true);", pedido_mercos)
+            pedido_mercos.click()
 
             wait = WebDriverWait(driver, 10)
 
@@ -96,7 +97,14 @@ def busca_pedidos():
             driver.switch_to.window(new_window_handle)
             assert driver.current_window_handle == new_window_handle
             link_mercos = driver.current_url
-            
+
+            # cria instancia pedido
+            # pedido = Pedido(numero_pedido_mercos, )
+
+            # cria instancia de cliente
+            # cliente = Cliente(nome, estado, cidade)
+
+            # bloco de codigo que coleta as informações necessárias do pedido para o Notion
             qtd_itens = driver.find_element(By.XPATH, '//*[@id="rodape_itens_pedido_js"]/div[1]/div[1]/div[2]/strong').text.replace('.','')
             qtd_total = driver.find_element(By.XPATH, '//*[@id="rodape_itens_pedido_js"]/div[1]/div[2]/div[2]/strong').text.replace('.','')
             valor_pedido = driver.find_element(By.CLASS_NAME, 'rodape-valor-total').text
@@ -110,22 +118,32 @@ def busca_pedidos():
             boleto = False
             transportadora = transportadoras(transportadora_mercos)
 
+            # é possível comentar o bloco acima e extrair as informações do html salvo assim como feito em pre_nota.py
             html = driver.page_source
-            with open(f"novos_pedidos\\{item}.html", "w", encoding="utf-8") as file:
+            file_path = f"novos_pedidos\\{numero_pedido_mercos}.html"
+
+            # baixa o pedido para a pasta e analisa itens de fabrica
+            with open(file_path, "w", encoding="utf-8") as file:
                 file.write(html)
-            file_path = f"novos_pedidos\\{item}.html"
             df = pd.read_html(
                 file_path, attrs={"id": "tabela_itens_pedido"}
             )[0].drop(columns=["Foto", "Desc. Acrés.", "Preço Tab."]).drop_duplicates(keep=False)
 
             df = df[df['Código'].str.startswith('ZLM', na=False)][['Código', 'Descrição', 'Qtde.']].sort_values(by="Código")
-            # print(df)
+
+            # abre pedido e extrai informações
+            with open(file_path, "rb") as html_content:
+                soup = BeautifulSoup(html_content, "lxml")
+                
+            lista_cliente = soup.select_one("#selecionado_autocomplete_id_codigo_cliente > span > div > div:nth-child(1) > div:nth-child(1) > h5 > a").get_text(strip=True, separator="|").split("|")
+            lista_cnpj_cpf = soup.select_one("#selecionado_autocomplete_id_codigo_cliente > span > div > div:nth-child(1) > div:nth-child(1) > h5 > small:nth-child(3)").get_text(strip=True, separator=" ").split(" ")
+            destino = soup.select_one('#selecionado_autocomplete_id_codigo_cliente > span > div > div:nth-child(3) > div > span').text
 
             if not df.empty:
                 linhas = []
                 for i in df.itertuples():
                     linhas.append(f"{i[1]} - {i[2]} - {i[3]}")
-                progresso = "FITAS DA FÁBRICA"
+                progresso = "SOLICITAÇÕES FÁBRICA"
             else:
                 print("Sem itens da fábrica")
                 progresso = "EM ANÁLISE"
@@ -140,17 +158,17 @@ def busca_pedidos():
             valor_separado = valor_pedido.split()[1].replace('.','').replace(',','.')
             decimal = Decimal(valor_separado)
             valor_ajustado = float(decimal)
-            resposta = cria_pedido(item, qtd_itens, qtd_total, boleto, transportadora, fantasia, vendedor, link_mercos, data_pedido, nome_excursao, time, valor_ajustado, progresso)
+            resposta = cria_pedido(numero_pedido_mercos, qtd_itens, qtd_total, boleto, transportadora, fantasia, vendedor, link_mercos, data_pedido, nome_excursao, time, valor_ajustado, progresso)
             if not df.empty:
                 # print(resposta.json())
                 page_id = resposta.json()["id"]
                 cria_bloco(page_id, linhas)
-            print(f"Pedido {item} | Quantidade de itens: {qtd_itens} | Quantidade Total: {qtd_total} | Valor: {valor_pedido} | Pagamento: {cond_pagamento} | Cliente: {fantasia} | Vendedor: {vendedor} | Data: {data_pedido}" )
+            print(f"Pedido {numero_pedido_mercos} | Quantidade de itens: {qtd_itens} | Quantidade Total: {qtd_total} | Valor: {valor_pedido} | Pagamento: {cond_pagamento} | Cliente: {fantasia} | Vendedor: {vendedor} | Data: {data_pedido}" )
             print(link_mercos)
             driver.close()
             driver.switch_to.window(original_window_handle)
         else:
-            print(f"Pedido {item} já está nos pedidos")
+            print(f"Pedido {numero_pedido_mercos} já está nos pedidos")
 
 print('Não Faturados - Primeira Busca')
 nao_faturados = busca_pedidos()
