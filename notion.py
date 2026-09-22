@@ -11,6 +11,8 @@ from selenium.webdriver.support.ui import WebDriverWait
 # Carrega segredos
 load_dotenv('credentials.env')
 data_source_id = os.getenv('SOURCE')
+cotacao_id = os.getenv('COTACAO')
+clientes = os.getenv('CLIENTES')
 token = os.getenv('TOKEN')
 mercos_user = os.getenv('MERCUS_USER')
 mercos_password = os.getenv('MERCUS_PASSWORD')
@@ -87,6 +89,88 @@ def consulta_titles(data, proximo, source=data_source_id):
     titles = requests.post(url, headers=headers, json=payload)
     return titles
 
+def busca_cliente(cnpj, source=clientes):
+    url = f"https://api.notion.com/v1/data_sources/{source}/query?"
+    headers = {
+        "Notion-Version": "2026-03-11",
+        "Authorization": f"Bearer {token}",
+    }
+    payload = {
+        "sorts": [{ "timestamp": "created_time", "direction":"descending" }],
+        "filter":
+            {
+                "property":"CNPJ/CPF",
+                "rich_text":{"equals":cnpj}
+            },
+    }
+    cliente = requests.post(url, headers=headers, json=payload)
+    return cliente.json()
+
+def busca_cliente_id(cnpj, source=clientes):
+    url = f"https://api.notion.com/v1/data_sources/{source}/query?"
+    headers = {
+        "Notion-Version": "2026-03-11",
+        "Authorization": f"Bearer {token}",
+    }
+    payload = {
+        "sorts": [{ "timestamp": "created_time", "direction":"descending" }],
+        "filter":
+            {
+                "property":"CNPJ/CPF",
+                "rich_text":{"equals":cnpj}
+            },
+    }
+
+    cliente = requests.post(url, headers=headers, json=payload)
+    try:
+        return cliente.json()['results'][0]['id']
+    except Exception as e:
+        return False
+
+def propriedade_cliente(page_id, property_id):
+    url = f"https://api.notion.com/v1/pages/{page_id}/properties/{property_id}"
+
+    headers = {
+            "Notion-Version": "2026-03-11",
+            "Authorization": f'Bearer {token}',
+        }
+    
+    propriedades = requests.get(url, headers=headers)
+    if propriedades.status_code == 200:
+        print(f"Cliente encontrado com sucesso")
+    else:
+        print(f"Não foi possível encontrar o cliente")
+        print(propriedades.json())
+    return propriedades
+    
+def cadastra_cliente(cnpj, fantasia, source=clientes):
+    url = 'https://api.notion.com/v1/pages'
+    headers = {
+        "Notion-Version": "2026-03-11",
+        "Authorization": f"Bearer {token}",
+    }
+    payload = {
+        "parent":{
+            "data_source_id": source,
+            "type":"data_source_id"
+        },
+        "properties":{
+            "CNPJ/CPF":{
+                    "title":[
+                        {"text":{"content":f"{cnpj}"}}
+                    ]
+            },
+            "NOME FANTASIA":{
+                "type":"rich_text",
+                "rich_text":[{
+                    "text":{"content":fantasia}
+                }]
+            }
+        }
+    }
+    novo_cliente = requests.post(url, headers=headers, json=payload)
+    return novo_cliente
+
 def consulta_boletos(source=data_source_id):
     url = f"https://api.notion.com/v1/data_sources/{source}/query"
     headers = {
@@ -161,7 +245,7 @@ def procura(pedido):
 
     return pesquisa
 
-def cria_pedido(pedido, itens, quantidade, boleto, transportadora, cliente, vendedor, link_mercos, data_pedido, nome_excursao, equipe, valor, progresso, source=data_source_id):
+def cria_pedido(pedido, itens, quantidade, boleto, transportadora, cliente, vendedor, link_mercos, data_pedido, nome_excursao, equipe, valor, progresso, id_cliente, frete_tabelado, source=data_source_id):
     url = 'https://api.notion.com/v1/pages'
     headers = {
         "Notion-Version": "2026-03-11",
@@ -178,6 +262,11 @@ def cria_pedido(pedido, itens, quantidade, boleto, transportadora, cliente, vend
                 { "text": { "content": f"{pedido}" } }
                 ]
             },
+            "CLIENTES":{
+                "relation":[
+                    {"id":f"{id_cliente}"}
+                ]
+            },
             "PROGRESSO": {
                 "status":{"name": progresso}
             },
@@ -190,6 +279,10 @@ def cria_pedido(pedido, itens, quantidade, boleto, transportadora, cliente, vend
                 "id": "wTpu",
                 "type":"number",
                 "number": int(quantidade),
+            },
+            "FRETE TABELADO": {
+                "type":"number",
+                "number": frete_tabelado,
             },
             "BOLETO":{
                 "type": "select",
@@ -252,6 +345,44 @@ def cria_pedido(pedido, itens, quantidade, boleto, transportadora, cliente, vend
     else:
         print(f"Pedido {pedido} criado com sucesso")
         return novo_pedido
+
+def cria_cotacao(pedido, id_pedido, frete_tabelado, source=cotacao_id):
+    url = 'https://api.notion.com/v1/pages'
+    headers = {
+        "Notion-Version": "2026-03-11",
+        "Authorization": f"Bearer {token}",
+    }
+    payload = {
+        "parent":{
+            "data_source_id": source,
+            "type":"data_source_id"
+        },
+        "properties": {
+            "COTACAO": {
+                    "title": [
+                { "text": { "content": f"{pedido}" } }
+                ]
+            },
+            "PEDIDO":{
+                "relation":[
+                    {"id":f"{id_pedido}"}
+                ]
+            },
+            "FRETE TABELADO": {
+                "type":"number",
+                "number": frete_tabelado,
+            },
+        }
+    }
+
+    nova_cotacao = requests.post(url, headers=headers, json=payload)
+    if nova_cotacao.status_code == 400:
+        print("Erro ao criar cotação")
+        print(nova_cotacao.json())
+        return nova_cotacao
+    else:
+        print(f"Cotação do pedido {pedido} criada com sucesso.")
+        return nova_cotacao
 
 def cria_bloco(page_id, linhas):
     url = f'https://api.notion.com/v1/blocks/{page_id}/children'
@@ -480,6 +611,30 @@ def seta_nf(id, nf):
         print(atualizados.json())
     return atualizados
 
+def atualiza_cotacao(id, data_cotacao, valor_frete, prazo):
+    url = f"https://api.notion.com/v1/pages/{id}"
+
+    payload = {
+        "properties":{
+            "DATA COTAÇÃO BRASPRESS":{"date":{"start":f"{data_cotacao}"}},
+            "COTAÇÃO BRASPRESS":{"number":valor_frete},
+            "PRAZO BRASPRESS":{"number":prazo},
+        }
+    }
+
+    headers = {
+            "Notion-Version": "2026-03-11",
+            "Authorization": f'Bearer {token}',
+        }
+    
+    atualizados = requests.patch(url, headers=headers, json=payload)
+    if atualizados.status_code == 200:
+        print(f"Cotação atualizada com sucesso")
+    else:
+        print(f"Não foi possível atualizar a cotação")
+        print(atualizados.json())
+    return atualizados
+
 def atualiza_dados_faturamento(id, dados_atualizados):
     url = f"https://api.notion.com/v1/pages/{id}"
     qtd_itens, qtd_total, valor_pedido, link_mercos, vendedor, time = dados_atualizados
@@ -542,8 +697,9 @@ def id_pedido_notion(pedido):
     'page_size':500
     }
 
-    id_pedido = requests.post(url, headers=headers, json=payload).json()['results'][0]['id']
-    transportadora = requests.post(url, headers=headers, json=payload).json()['results'][0]['properties']['TRANSPORTADORA']['select']['name']
+    requisicao = requests.post(url, headers=headers, json=payload).json()['results'][0]
+    id_pedido = requisicao['id']
+    transportadora = requisicao['properties']['TRANSPORTADORA']['select']['name']
     return (id_pedido, transportadora)
 
 if __name__=="__main__":

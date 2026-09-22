@@ -504,7 +504,7 @@ def configuracoes():
     pedido = input('Digite o numero do pedido ou Digite 0 para encerrar: ')
     if pedido == "0":
         return False
-
+    
     salva_html(pedido)
     file_path = f"pedidos\\{pedido}.html"
 
@@ -562,6 +562,7 @@ def configuracoes():
     try:
         if cliente in grupo_zigg:
             pct = 0.12
+
         else:
             pct = int(porcentagem)/100
     except Exception as e:
