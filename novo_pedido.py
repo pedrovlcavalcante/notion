@@ -10,11 +10,12 @@ import time
 from decimal import Decimal
 import tkinter as tk
 from tkinter import messagebox
-from notion import procura, cria_pedido, cria_bloco, login_mercus, transportadoras, equipe, busca_cliente_id, cria_cotacao, cadastra_cliente
-from dependencias import selenium_esta_rodando, estados_brasil, regras_preco
+from notion import procura, cria_pedido, cria_bloco, login_mercus, transportadoras, equipe
+from dependencias import selenium_esta_rodando, Pedido, Cliente
 import logging
 import pandas as pd
 
+tipos_boleto = ['Para 30 dias', 'Para 45 dias']
 # Configura o log para gravar apenas a data e hora no arquivo 'datas.log'
 def log():
     logging.basicConfig(
@@ -35,100 +36,11 @@ def verifica_dia():
     diferenca = hoje - ultima_data
     return diferenca
 
-def preco_tabelado(tabela_mercos: str, estado, valor_pedido):
-    # Agrupamentos de estados
-    nordeste = ["AL", "BA", "MA", "PB", "PE", "PI", "RN", "SE"]
-    norte = ["AC", "AP", "AM", "PA", "RO", "RR", "TO"]
-
-    # Identifica o grupo da tabela ("10" ou "40")
-    tabela1 = ["10", "20", "30"]
-    tabela2 = ["40", "50"]
-    tabela = tabela_mercos.split(',')
-    if len(tabela)>1:
-        for t in tabela:
-            if t in tabela2:
-                tabela = "40"
-
-    if tabela[0] in tabela1:
-        grupo_tabela = "10"
-    elif tabela[0] in tabela2:
-        grupo_tabela = "40"
-    else:
-        grupo_tabela = None
-
-    # Identifica a região correta no dicionário
-    if estado == "CE":
-        regra_regiao = "CE"
-        faixas = regras_preco.get(regra_regiao, {})
-        for (minimo, maximo), preco in faixas.items():
-            if minimo <= valor_pedido <= maximo:
-                return preco
-        # grupo_tabela = "todas"  # CE ignora o tipo de tabela nas suas regras
-    elif estado in nordeste:
-        regra_regiao = "nordeste"
-    elif estado in norte:
-        regra_regiao = "norte"
-    else:
-        regra_regiao = "outras"
-
-    # Busca as faixas de valores baseadas na região e tabela detectadas
-    faixas = regras_preco.get(regra_regiao, {}).get(grupo_tabela, {})
-
-    # Varre as faixas para encontrar o preço correspondente
-    for (minimo, maximo), preco in faixas.items():
-        if minimo <= valor_pedido <= maximo:
-            return preco
-
-    return 0  
-
-while selenium_esta_rodando():
-    for i in range(4):
-        pontos = "." * i
-        time.sleep(0.2)
-        print(f"\rAguardando vez para acessar a pagina{pontos:<3}", end="", flush=True)
-
-chrome_options = Options()
-
-# Add the experimental "detach" option
-chrome_options.add_experimental_option("detach", True)
-chrome_options.add_argument("--headless=new")
-
-# Initialize the WebDriver with the specified options
-driver = webdriver.Chrome(options=chrome_options)
-
-diferenca = verifica_dia()
-
-periodo_final = datetime.strftime(datetime.today().date(), "%d/%m/%Y")
-data_inicial = datetime.today().date() - diferenca
-periodo_incial = datetime.strftime(data_inicial, "%d/%m/%Y")
-
-log()
-
-print(periodo_final, periodo_incial)
-base_url = 'https://app.mercos.com/384882/'
-url_faturados = 'relatorios/pedidos_faturados/'
-url_pesquisa = base_url+url_faturados
-
-params = {'ajax':1, 'ordem':'asc', 'periodo_final':f'{periodo_final}', 'periodo_inicial':f'{periodo_incial}', 'status_faturamento':'0', 'status_pedido':'2', 'tipo_de_pedido':'-1', 'valor_ordenacao':'data_emissao'}
-url = f"{url_pesquisa}?{urlencode(params)}"
-driver.get(url)
-
-login_mercus(driver)
-
-driver.get(url)
-
-tipos_boleto = ['Para 30 dias', 'Para 45 dias']
-    
-def busca_pedidos():
+def busca_pedidos(driver):
     WebDriverWait(driver, 30).until(
     EC.presence_of_element_located((By.ID, 'componente-de-tabela-2'))
 )
-
     linhas = driver.find_elements(By.XPATH, '//*[@id="componente-de-tabela-2"]/table/tbody/tr')
-    print(len(linhas))
-    if len(linhas) == 1:
-        print("Nada encontrado, ainda não tem pedidos hoje.")
-        return False
     for linha in linhas:
         pedido_mercos = linha.find_element(By.TAG_NAME, "a")
         numero_pedido_mercos = pedido_mercos.text.replace("#","")
@@ -149,107 +61,63 @@ def busca_pedidos():
             assert driver.current_window_handle == new_window_handle
             link_mercos = driver.current_url
 
-            # cria instancia pedido
-            # pedido = Pedido(numero_pedido_mercos, )
-
-            # cria instancia de cliente
-            # cliente = Cliente(nome, estado, cidade)
-
-            # bloco de codigo que coleta as informações necessárias do pedido para o Notion
-            qtd_itens = driver.find_element(By.XPATH, '//*[@id="rodape_itens_pedido_js"]/div[1]/div[1]/div[2]/strong').text.replace('.','')
-            qtd_total = driver.find_element(By.XPATH, '//*[@id="rodape_itens_pedido_js"]/div[1]/div[2]/div[2]/strong').text.replace('.','')
-            valor_pedido = driver.find_element(By.CLASS_NAME, 'rodape-valor-total').text
-            cond_pagamento = driver.find_element(By.XPATH, '//*[@id="informacoes_complementares"]/div/div/div[2]/div[1]/div/div[2]').text
-            transportadora_mercos = driver.find_element(By.XPATH, '//*[@id="informacoes_complementares"]/div/div/div[3]/div[2]/div/div[2]').text
-
-            fantasia = driver.find_element(By.XPATH, '//*[@id="selecionado_autocomplete_id_codigo_cliente"]/span/div/div[1]/div[1]/h5/a').text
-            vendedor = driver.find_element(By.XPATH, '//*[@id="informacoes_complementares"]/div/div/div[1]/div[4]/div/div[2]').text
-            extrai_data = driver.find_element(By.XPATH, '//*[@id="informacoes_complementares"]/div/div/div[1]/div[2]/div/div[2]').text
-            data_pedido = datetime.strptime(extrai_data, "%d/%m/%Y").date().isoformat()
-            boleto = False
-            transportadora = transportadoras(transportadora_mercos)
-
-            # é possível comentar o bloco acima e extrair as informações do html salvo assim como feito em pre_nota.py
+            # salva html do pedido
             html = driver.page_source
             file_path = f"novos_pedidos\\{numero_pedido_mercos}.html"
-
-            # baixa o pedido para a pasta e analisa itens de fabrica
             with open(file_path, "w", encoding="utf-8") as file:
                 file.write(html)
-            df = pd.read_html(
-                file_path, attrs={"id": "tabela_itens_pedido"}
-            )[0].drop(columns=["Foto", "Desc. Acrés.", "Preço Tab."]).drop_duplicates(keep=False)
 
-            subtotal = df['Subtotal'].apply(lambda x: x.split()[1].replace(".","").replace(",",".")).astype(float)
-            valor_produtos = subtotal.sum()
+            pedido = Pedido(numero_pedido_mercos, link_mercos)
+            pedido.extrai_produtos()
+            pedido.calcula_frete_tabelado()
+            pedido.itens_fabrica()
+            pedido.cria_pedido_notion()
 
-            df = df[df['Código'].str.startswith('ZLM', na=False)][['Código', 'Descrição', 'Qtde.']].sort_values(by="Código")
-
-            # abre pedido e extrai informações
-            with open(file_path, "rb") as html_content:
-                soup = BeautifulSoup(html_content, "lxml")
-
-            lista_cnpj_cpf = soup.select_one("#selecionado_autocomplete_id_codigo_cliente > span > div > div:nth-child(1) > div:nth-child(1) > h5 > small:nth-child(3)").get_text(strip=True, separator=" ").split(" ")
-            cidade_estado = soup.select_one("#selecionado_autocomplete_id_codigo_cliente > span > div > div:nth-child(3) > div > span").get_text(strip=True, separator=", ").split(", ")
-            outros_campos = soup.select_one("#informacoes_complementares > div > div > div:nth-child(2)")
-
-            cidade = cidade_estado[0]
-            estado = cidade_estado[1]
-            uf = estados_brasil.get(estado)
-
-            for child in outros_campos.find_all():
-                texto_limpo = child.get_text(strip=True)
-                if texto_limpo == "* TABELA USADA NO PEDIDO":
-                    # .find_next_sibling() pega o elemento irmão que vem logo depois dele
-                    texto_tabela = child.find_next_sibling()
-                    if texto_tabela:
-                        tabela_mercos = texto_tabela.get_text(strip=True)
-                        break
-
-            frete_tabelado = preco_tabelado(tabela_mercos, uf, valor_produtos)
-            # print(lista_cnpj_cpf)
-            if len(lista_cnpj_cpf) > 1:
-                cnpj_cpf = lista_cnpj_cpf[1]
-            else:
-                cnpj_cpf = lista_cnpj_cpf[0]
-
-            id_cliente = busca_cliente_id(cnpj_cpf)
-            if not id_cliente:
-                novo_cliente = cadastra_cliente(cnpj_cpf, fantasia)
-                id_cliente = novo_cliente.json()['id']
-            if not df.empty:
-                linhas = []
-                for i in df.itertuples():
-                    linhas.append(f"{i[1]} - {i[2]} - {i[3]}")
-                progresso = "EM ANÁLISE"
-            else:
-                print("Sem itens da fábrica")
-                progresso = "EM ANÁLISE"
-
-            time = equipe(vendedor)
-            if ('/' in cond_pagamento) or (cond_pagamento in tipos_boleto):
-                boleto = True
-            if ':' in  transportadora_mercos:
-                nome_excursao = transportadora_mercos
-            else:
-                nome_excursao = False
-            valor_separado = valor_pedido.split()[1].replace('.','').replace(',','.')
-            decimal = Decimal(valor_separado)
-            valor_ajustado = float(decimal)
-            resposta = cria_pedido(numero_pedido_mercos, qtd_itens, qtd_total, boleto, transportadora, fantasia, vendedor, link_mercos, data_pedido, nome_excursao, time, valor_ajustado, progresso, id_cliente, frete_tabelado)
-            page_id = resposta.json()["id"]
-            cotacao = cria_cotacao(numero_pedido_mercos, page_id, frete_tabelado)
-            if not df.empty:
-                cria_bloco(page_id, linhas)
-            print(f"Pedido {numero_pedido_mercos} | Quantidade de itens: {qtd_itens} | Quantidade Total: {qtd_total} | Valor: {valor_pedido} | Pagamento: {cond_pagamento} | Cliente: {fantasia} | Vendedor: {vendedor} | Data: {data_pedido}" )
-            print(link_mercos)
+            print(f"Pedido {pedido.numero} | Quantidade de itens: {pedido.itens} | Quantidade Total: {pedido.quantidade} | Valor: {pedido.valor_pedido} | Pagamento: {pedido.condicao_pagamento} | Cliente: {pedido.cliente.nome} | Vendedor: {pedido.vendedor} | Data: {pedido.data_pedido}" )
+            print(pedido.link)
             driver.close()
             driver.switch_to.window(original_window_handle)
         else:
             print(f"Pedido {numero_pedido_mercos} já está nos pedidos")
 
-print('Não Faturados - Primeira Busca')
-nao_faturados = busca_pedidos()
+while selenium_esta_rodando():
+    for i in range(4):
+        pontos = "." * i
+        time.sleep(0.2)
+        print(f"\rAguardando vez para acessar a pagina{pontos:<3}", end="", flush=True)
+
+diferenca = verifica_dia()
+
+periodo_final = datetime.strftime(datetime.today().date(), "%d/%m/%Y")
+data_inicial = datetime.today().date() - diferenca
+periodo_incial = datetime.strftime(data_inicial, "%d/%m/%Y")
+
+#Abre chrome e acessa mercos
+chrome_options = Options()
+
+# Add the experimental "detach" option
+chrome_options.add_experimental_option("detach", True)
+chrome_options.add_argument("--headless=new")
+
+# Initialize the WebDriver with the specified options
+driver = webdriver.Chrome(options=chrome_options)
+
+print(f"Período: {periodo_incial} - {periodo_final}")
+base_url = 'https://app.mercos.com/384882/'
+url_faturados = 'relatorios/pedidos_faturados/'
+url_pesquisa = base_url+url_faturados
+
+params = {'ajax':1, 'ordem':'asc', 'periodo_final':f'{periodo_final}', 'periodo_inicial':f'{periodo_incial}', 'status_faturamento':'0', 'status_pedido':'2', 'tipo_de_pedido':'-1', 'valor_ordenacao':'data_emissao'}
+
+url = f"{url_pesquisa}?{urlencode(params)}"
+
+driver.get(url)
+login_mercus(driver)
+driver.get(url)
+    
+log()
+
+nao_faturados = busca_pedidos(driver)
 driver.close()
 
 root = tk.Tk()

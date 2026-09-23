@@ -33,7 +33,9 @@ numero_pesquisa = st.sidebar.number_input(
     format="%i",
 )
 st.sidebar.info("Digite um número acima para pesquisar.")
-
+# pesquisa = procura(numero_pesquisa)
+# id_cliente = pesquisa.json()
+# st.write(id_cliente)
 # # Filtragem em tempo real da pesquisa por pedido
 if numero_pesquisa > 0:
     try: 
@@ -78,11 +80,16 @@ if numero_pesquisa > 0:
             use_container_width=True,
             hide_index=True,
         )
-    except:
+        valor_pedido_alternativo = st.text_input("Valor pedido:")
+        modal = st.selectbox("Modal", ['Rodoviário', 'Aéreo'])
+        avulso = False
+    except Exception as e:
+        avulso = True
         st.warning("Nenhum pedido encontrado com este número.")
         cnpj_destinatario = st.text_input("CNPJ DESTINATÁRIO:")
         cep_destinatario = st.text_input("CEP DESTINATÁRIO:")
         input_valor_pedido = st.text_input("Valor do Pedido:")
+        modal = st.selectbox("Modal", ['Rodoviário', 'Aéreo'])
 
 API_URL = "https://api.braspress.com/v1/cotacao/calcular/json"
 
@@ -122,11 +129,15 @@ def parse_input_value(value_str):
     except ValueError:
         return 0.0
 try:
-    valor_pedido = parse_valor_pedido(input_valor_pedido)
+    if not valor_pedido_alternativo:
+        
+            valor_pedido = parse_valor_pedido(input_valor_pedido)
+
+    else:
+        valor_pedido = parse_valor_pedido(valor_pedido_alternativo)
 except:
     valor_pedido = 0
-    st.write("Pesquise o pedido para cotação")
-
+st.write("Pesquise o pedido para cotação")
 # --- FORMULÁRIO PRINCIPAL ---
 col1, col2, col3 = st.columns(3)
 
@@ -156,7 +167,7 @@ with col2:
         )
     else:
         valor_input = valor_pedido*pct_nota
-        st.text("Teste")
+        st.text("Valor Nota Fiscal Calculada")
         st.text(f"{valor_input}")
 
 # with col2:
@@ -267,10 +278,14 @@ if st.button("🚀 Gerar Cotação", type="primary"):
             for item in st.session_state.volumes_list
         ]
         total_vols = sum(item["volumes"] for item in volumes_payload)
+        if modal == "Rodoviário":
+            m = "R"
+        else:
+            m = "A"
         st.session_state.payload_cotacao = {
             "cnpjRemetente": cnpj_rementente,
             "cnpjDestinatario": cnpj_destinatario,
-            "modal": "R",
+            "modal": m,
             "tipoFrete": 1,
             "cepOrigem": cep_origem,
             "cepDestino": cep_destinatario,
@@ -309,7 +324,7 @@ if st.session_state.cotacao_gerada and st.session_state.payload_cotacao:
                 response = requests.post(API_URL, json=payload, headers=headers, timeout=10)
                 if response.status_code == 200:
                     st.success("Cotação enviada com sucesso!")
-                    res1, res2, res3, res4 = st.columns(4)
+                    res1, res2, res3, res4, res5 = st.columns(5)
                     with res1:
                         protocolo = response.json()['id']
                         st.metric("Protocolo", protocolo)
@@ -322,7 +337,12 @@ if st.session_state.cotacao_gerada and st.session_state.payload_cotacao:
                     with res4:
                         data_cotacao = datetime.today().date()
                         st.metric("Data da Simulação", data_cotacao.strftime('%d/%m/%Y'))
-                    atualiza_cotacao(id_cotacao, data_cotacao.isoformat(), valor_frete, prazo)
+                    with res5:
+                        st.metric("Modal", modal)
+                    if not avulso:
+                        atualiza_cotacao(id_cotacao, data_cotacao.isoformat(), valor_frete, prazo)
+                    else:
+                        pass
                 else:
                     st.error(f"Erro na API ({response.status_code}): {response.text}")
         except Exception as e:

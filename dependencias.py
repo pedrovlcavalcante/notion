@@ -1,8 +1,9 @@
 import psutil, json
-from bs4 import BeautifulSoup
 import pandas as pd
+from bs4 import BeautifulSoup
 from dotenv import load_dotenv
-from notion import busca_cliente
+from notion import busca_cliente, cria_pedido, cria_cotacao, cria_bloco, equipe
+from datetime import datetime
 import requests
 import os
 import base64
@@ -81,13 +82,14 @@ class Cliente():
         self.fiscal = self.extrai_cnpj()
         notion = busca_cliente(self.fiscal)
         # print(notion)
-        busca = notion['results'][0]['properties']
-        self.codigo_integracao_cliente = busca['CODIGO OMIE']['number']
-        self.cep = busca['CEP']['rich_text'][0]['text']['content']
-        self.nome = busca['Nome fantasia']['rich_text'][0]['text']['content']
-        self.razao_social = busca['RAZAO SOCIAL']['rich_text'][0]['text']['content']
-        self.cidade = busca['CIDADE']['rich_text'][0]['text']['content']
-        self.estado = busca['ESTADO']['rich_text'][0]['text']['content']
+        busca = notion['results'][0]
+        self.codigo_integracao_cliente = busca['properties']['CODIGO OMIE']['number']
+        self.cep = busca['properties']['CEP']['rich_text'][0]['text']['content']
+        self.nome = busca['properties']['NOME FANTASIA']['rich_text'][0]['text']['content']
+        self.razao_social = busca['properties']['RAZAO SOCIAL']['rich_text'][0]['text']['content']
+        self.cidade = busca['properties']['CIDADE']['rich_text'][0]['text']['content']
+        self.estado = busca['properties']['ESTADO']['rich_text'][0]['text']['content']
+        self.id_notion = busca['id']
 
     def extrai_cnpj(self):
         file_path = f"novos_pedidos\\{self.numero_pedido_mercos}.html"
@@ -103,9 +105,10 @@ class Cliente():
 
 class Pedido():
     # a ideia aqui é essa ser a classe base para criar a pagina do pedido no Notion e criar a pre-nota também
-    def __init__(self, numero):
+    def __init__(self, numero, link):
         self.numero = numero
         file_path = f"novos_pedidos\\{self.numero}.html"
+
         with open(file_path, "rb") as html_content:
             soup = BeautifulSoup(html_content, "lxml")
 
@@ -115,14 +118,17 @@ class Pedido():
         # 1ª coluna
         vendedor = soup.select_one('#informacoes_complementares > div > div > div:nth-child(1) > div:nth-child(4) > div > div.col-sm-8.label-valor').text
         data_emissao = soup.select_one('#informacoes_complementares > div > div > div:nth-child(1) > div:nth-child(2) > div > div.col-sm-8.label-valor').text
-    
+        data_pedido = datetime.strptime(data_emissao, "%d/%m/%Y").date().isoformat()
         # 2ª coluna
         condicao_pagamento = soup.select_one("#informacoes_complementares > div > div > div:nth-child(2) > div:nth-child(1) > div > div.js-condicao-pagamento.col-sm-8.label-valor").text
         outros_campos = soup.select_one("#informacoes_complementares > div > div > div:nth-child(2)")
     
         #3ª coluna
         transportadora = soup.select_one("#informacoes_complementares > div > div > div:nth-child(3) > div:nth-child(2) > div > div.col-sm-8.label-valor").text
-    
+        if ':' in  transportadora:
+            excursao = transportadora
+        else:
+            excursao = False
     
         # essa variável se encontra no fim dessa div, quase no rodapé
         info_adicionais = soup.select_one("#informacoes_complementares > div > div > div.flex.col-sm-12.tpadded20 > div.label-valor").text
@@ -161,18 +167,20 @@ class Pedido():
         if ('/' in condicao_pagamento) or (condicao_pagamento in tipos_boleto):
             boleto = True
 
-        
         self.cliente = Cliente(self.numero)
         self.vendedor = vendedor
-        self.data_emissao = data_emissao
+        self.time = equipe(self.vendedor)
+        self.data_pedido = data_pedido
         self.condicao_pagamento = condicao_pagamento
         self.boleto = boleto
         self.tabela_mercos = tabela_mercos
         self.observacao_interna = observacao
         self.informacoes_adicionais = info_adicionais
         self.porcentagem = porcentagem
+        self.link = link
 
         self.produtos = None
+        self.itens_da_fabrica = None
         self.itens = None
         self.quantidade = None
         self.valor_pedido = None
@@ -181,6 +189,9 @@ class Pedido():
         self.volumes = None
         self.frete_tabelado = None
         self.transportadora = transportadora
+        self.excursao = excursao
+
+        self.page_id = None
 
     def extrai_produtos(self):
         file_path = f"novos_pedidos\\{self.numero}.html"
@@ -195,7 +206,7 @@ class Pedido():
         df["Qtde."] = qtde
 
         self.produtos = df
-        self.itens = df['Código'].value_counts()
+        self.itens = df['Código'].value_counts().sum()
         self.quantidade = df['Qtde.'].sum()
         self.valor_pedido = subtotal.sum()
 
@@ -203,9 +214,6 @@ class Pedido():
         estado = self.cliente.estado
         tabela_mercos = self.tabela_mercos
         valor_pedido = self.valor_pedido
-        #apagar esse if depois, apenas para testes
-        if valor_pedido == None:
-            valor_pedido = 2000
         # Agrupamentos de estados
         nordeste = ["AL", "BA", "MA", "PB", "PE", "PI", "RN", "SE"]
         norte = ["AC", "AP", "AM", "PA", "RO", "RR", "TO"]
@@ -251,6 +259,25 @@ class Pedido():
                 self.frete_tabelado = preco
         return 0  
 
+    def itens_fabrica(self):
+        df = self.produtos
+        df = df[df['Código'].str.startswith('ZLM', na=False)][['Código', 'Descrição', 'Qtde.']].sort_values(by="Código")
+        if not df.empty:
+            linhas = []
+            for i in df.itertuples():
+                linhas.append(f"{i[1]} - {i[2]} - {i[3]}")
+            self.itens_da_fabrica = linhas
+        else:
+            print("Sem itens da fábrica")
+            self.itens_da_fabrica = False
+
+    def cria_pedido_notion(self):
+        pagina = cria_pedido(self.numero, self.itens, self.quantidade, self.boleto, self.transportadora, self.cliente.nome, self.vendedor, self.link, self.data_pedido, self.excursao, self.time, self.valor_pedido, "EM ANÁLISE", self.cliente.id_notion, self.frete_tabelado)
+        self.page_id = pagina.json()["id"]
+        cria_cotacao(self.numero, self.page_id, self.frete_tabelado)
+        if self.itens_da_fabrica:
+            cria_bloco(self.page_id, self.itens_da_fabrica)
+
 class Cotacao():
     load_dotenv('credentials.env')
     cnpj_rementente = os.getenv("CNPJ_REMETENTE")
@@ -281,43 +308,33 @@ class Cotacao():
         'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/50.0.2661.102 Safari/537.36'
     }
 
-    # Dados do corpo da requisição (Payload) corrigidos
-    data = {
-        "cnpjRemetente": cnpj_rementente,
-        "cnpjDestinatario": 46223063000108,
-        "modal": "R",
-        "tipoFrete": 1,
-        "cepOrigem": cep_origem,
-        "cepDestino": 69097750,
-        "vlrMercadoria": 543.09,
-        "peso": 51.10,
-        "volumes": 3,
-        "cubagem": [
-            {
-                "altura": 0.39,
-                "largura": 0.47,
-                "comprimento": 0.5,
-                "volumes": 2
-            },
-            {
-                "altura": 0.22,
-                "largura": 0.22,
-                "comprimento": 0.42,
-                "volumes": 1
-            }
-        ]
-    }
-
-    # Fazendo a requisição POST
-    response = requests.post(url, headers=headers, json=data)
-
-    # Exibindo o resultado
-    print(f"Status Code: {response.status_code}")
-    print(response.text)
-
+    def dados():
+        data = {
+            "cnpjRemetente": cnpj_rementente,
+            "cnpjDestinatario": cnpj_destinatario,
+            "modal": modal,
+            "tipoFrete": tipo_frete,
+            "cepOrigem": cep_origem,
+            "cepDestino": cep_destino,
+            "vlrMercadoria": valor_nota,
+            "peso": peso,
+            "volumes": volumes,
+            "cubagem": [
+                {
+                    "altura": 0.39,
+                    "largura": 0.47,
+                    "comprimento": 0.5,
+                    "volumes": 2
+                },
+            ]
+        }
+    def requisicao(url, headers, data):
+        # Fazendo a requisição POST
+        response = requests.post(url, headers=headers, json=data)
+        return response
 
 if __name__=="__main__":
-
+    pass
     # cliente = Cliente(15187)
     # print(cliente.fiscal)
     # print(cliente.nome)
@@ -325,12 +342,9 @@ if __name__=="__main__":
     # print(cliente.estado)
     # print(cliente.codigo_integracao)
 
-    pedido = Pedido(15187)
+    pedido = Pedido(15187, "nada")
     pedido.extrai_produtos()
     pedido.calcula_frete_tabelado()
     
-    print(pedido.valor_pedido)
-    print(pedido.tabela_mercos)
-    print(pedido.frete_tabelado)
-    print(pedido.cliente.estado)
+    print(pedido.itens)
     # c = Cotacao(15187)
