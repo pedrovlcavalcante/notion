@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-import requests, os, base64
+import requests, os, base64, textwrap
 from dotenv import load_dotenv
 from notion import procura, propriedade_cliente, atualiza_cotacao
 from datetime import datetime
@@ -21,6 +21,17 @@ credenciais_bytes = credenciais.encode("utf-8")
 base64_bytes = base64.b64encode(credenciais_bytes)
 base64_string = base64_bytes.decode("utf-8")
 
+def formatar_cnpj(cnpj):
+    # Converte para string e garante que tenha 14 dígitos preenchendo com zeros à esquerda
+    cnpj_limpo = str(cnpj).strip().zfill(14)
+    # Aplica a máscara: 00.000.000/0000-00
+    return f"{cnpj_limpo[:2]}.{cnpj_limpo[2:5]}.{cnpj_limpo[5:8]}/{cnpj_limpo[8:12]}-{cnpj_limpo[12:]}"
+
+def formatar_cep(cep):
+    # Converte para string e garante que tenha 8 dígitos preenchendo com zeros à esquerda
+    cep_limpo = str(cep).strip().zfill(8)
+    # Aplica a máscara: 00000-000
+    return f"{cep_limpo[:5]}-{cep_limpo[5:]}"
 
 st.set_page_config(page_title="Calculadora de Cotação", layout="wide")
 st.title("Sistema de Cotação de Volumes")
@@ -297,7 +308,7 @@ if st.button("🚀 Gerar Cotação", type="primary"):
 
         st.session_state.cotacao_gerada = True
         st.success("Cotação processada com sucesso!")
-
+    
 # --- EXIBIÇÃO E ENVIO DA COTAÇÃO (INDEPENDENTE DO CLIQUE RECENTE DO BOTÃO) ---
 if st.session_state.cotacao_gerada and st.session_state.payload_cotacao:
     payload = st.session_state.payload_cotacao
@@ -318,7 +329,7 @@ if st.session_state.cotacao_gerada and st.session_state.payload_cotacao:
             "Content-Type": "application/json",
             'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/50.0.2661.102 Safari/537.36'
         }
-
+        
         try:
             with st.spinner("Enviando cotação para a API..."):
                 response = requests.post(API_URL, json=payload, headers=headers, timeout=10)
@@ -347,3 +358,44 @@ if st.session_state.cotacao_gerada and st.session_state.payload_cotacao:
                     st.error(f"Erro na API ({response.status_code}): {response.text}")
         except Exception as e:
             st.error(f"Falha ao conectar na API: {e}")
+
+    if 'volumes_payload' in locals() and volumes_payload:
+        blocos_caixas = []
+        for item in volumes_payload:
+            c = int(item["comprimento"] * 100)
+            l = int(item["largura"] * 100)
+            a = int(item["altura"] * 100)
+            qtd = item["volumes"]
+        
+            bloco = (
+                f"{qtd} CX\n"
+                f"C: {c}\n"
+                f"L: {l}\n"
+                f"A: {a}")
+            blocos_caixas.append(bloco)
+
+        texto_caixas = "\n\n".join(blocos_caixas)
+
+        cnpj_formatado_remetente = formatar_cnpj(cnpj_rementente)
+        cep_formatado_remetente = formatar_cep(cep_origem)
+        cnpj_formatado_destinatario = formatar_cnpj(cnpj_destinatario)
+        cep_formatado_destinatario = formatar_cep(cep_destinatario)
+
+        texto_ajustado = (
+        f"CNPJ pagador: {cnpj_formatado_remetente}\n"
+        f"CEP pagador : {cep_formatado_remetente}\n\n"
+        f"CNPJ destinatário: {cnpj_formatado_destinatario}\n"
+        f"CEP destinatário: {cep_formatado_destinatario}\n\n"
+        f"{texto_caixas}\n\n"
+        f"{total_vols} VOLUMES\n\n"
+        f"PESO TOTAL: {peso_final} KG\n"
+        f"NF: R$ {valor_final:.2f}\n"  # Adicionei a formatação de dinheiro que você colocou no print
+        f"PEDIDO {numero_pesquisa}"
+        )   
+
+
+    # 1. Cria a caixa que esconde/mostra o conteúdo ao clicar
+        with st.expander("Texto para WhatsApp"):
+            
+            # 2. Exibe o texto com fonte monoespaçada e o botão de copiar automático
+            st.code(texto_ajustado, language="text")

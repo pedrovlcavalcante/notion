@@ -198,6 +198,11 @@ class Pedido():
         df = pd.read_html(
                 file_path, attrs={"id": "tabela_itens_pedido"}
             )[0].drop(columns=["Foto", "Desc. Acrés.", "Preço Tab."]).drop_duplicates(keep=False)
+        
+        df = df[~df['Código'].str.startswith('Observações:', na=False)]
+        df.dropna(how='all', inplace=True)
+        df.dropna(how='all', inplace=True, axis=1)
+        df.reset_index(inplace=True, drop=True)
 
         preco_liq = df['Preço Líq.'].apply(lambda x: x.split()[1].replace(",",".")).astype(float)
         subtotal = df['Subtotal'].apply(lambda x: x.split()[1].replace(".","").replace(",",".")).astype(float)
@@ -342,9 +347,9 @@ if __name__=="__main__":
     # print(cliente.estado)
     # print(cliente.codigo_integracao)
 
-    pedido = Pedido(15187, "nada")
-    pedido.extrai_produtos()
-    pedido.calcula_frete_tabelado()
+    # pedido = Pedido(15187, "nada")
+    # pedido.extrai_produtos()
+    # pedido.calcula_frete_tabelado()
     
-    print(pedido.itens)
+    # print(pedido.itens)
     # c = Cotacao(15187)

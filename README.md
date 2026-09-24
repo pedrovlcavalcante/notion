@@ -55,7 +55,7 @@ graph LR
 
 ### 🚚 Cotação Automatizada de Frete
 
-* Consumo da **API de transportadora parceira** para cálculo e alimentação de fretes em tempo real.
+* Consumo da **API da Transportadora Braspress** para cálculo e alimentação de fretes em tempo real.
 * Aplicação das regras de negócio e políticas internas de frete da empresa no momento do processamento.
 
 ### 📊 Painel de Expedição (Streamlit)
@@ -67,10 +67,12 @@ graph LR
 
 ## 🔮 Próximos Objetivos & Roadmap
 
-* [ ] **Refatoração para Arquitetura Orientada a Objetos (POO):**
-* [ ] Modelagem e implementação da classe `Cliente`.
-* [ ] Modelagem e implementação da classe `Pedido`.
-* [ ] Encapsulamento das regras de integração e comunicação com APIs dentro de módulos e classes dedicadas.
+* [x]  **Refatoração para Arquitetura Orientada a Objetos (POO):**
+* [x]  Modelagem e implementação da classe `Cliente`.
+* [x]  Modelagem e implementação da classe `Pedido`.
+* [ ]  Encapsulamento das regras de integração e comunicação com APIs dentro de módulos e classes dedicadas.
+* [ ]  Integração com a plataforma Melhor Envio.
+* [ ]  Implementação de interface gráfica
 
 
 
