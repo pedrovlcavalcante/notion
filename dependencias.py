@@ -59,6 +59,8 @@ regras_preco = {
 
 tipos_boleto = ['Para 30 dias', 'Para 45 dias']
 
+cidades_rm = ['AQUIRAZ', 'CASCAVEL', 'CAUCAIA', 'EUSÉBIO', 'EUSEBIO', 'FORTALEZA', 'HORIZONTE', 'ITAITINGA', 'MARACANAÚ', 'MARACANAU', 'MARANGUAPE', 'PACAJÚS', 'PACAJUS', 'PACATUBA', 'PINDORETAMA']
+
 def selenium_esta_rodando(): 
     # Nomes dos executáveis comuns de WebDrivers
     drivers_selenium = ["chromedriver", "geckodriver", "msedgedriver"]
@@ -217,52 +219,65 @@ class Pedido():
 
     def calcula_frete_tabelado(self):
         estado = self.cliente.estado
-        tabela_mercos = self.tabela_mercos
-        valor_pedido = self.valor_pedido
-        # Agrupamentos de estados
-        nordeste = ["AL", "BA", "MA", "PB", "PE", "PI", "RN", "SE"]
-        norte = ["AC", "AP", "AM", "PA", "RO", "RR", "TO"]
+        cidade = self.cliente.cidade
+        if cidade.upper() in cidades_rm:
+            if self.transportadora == 'EXPRESS FORTALEZA':
+                if self.valor_pedido < 1200:
+                    self.frete_tabelado = 33
+                    return 0
+                else:
+                    self.frete_tabelado = 0
+                    return 0
+            else:
+                self.frete_tabelado = 0
+                return 0
+        else:    
+            tabela_mercos = self.tabela_mercos
+            valor_pedido = self.valor_pedido
+            # Agrupamentos de estados
+            nordeste = ["AL", "BA", "MA", "PB", "PE", "PI", "RN", "SE"]
+            norte = ["AC", "AP", "AM", "PA", "RO", "RR", "TO"]
 
-        # Identifica o grupo da tabela ("10" ou "40")
-        tabela1 = ["10", "20", "30"]
-        tabela2 = ["40", "50"]
-        tabela = tabela_mercos.split(',')
-        if len(tabela)>1:
-            for t in tabela:
-                if t in tabela2:
-                    tabela = "40"
+            # Identifica o grupo da tabela ("10" ou "40")
+            tabela1 = ["10", "20", "30"]
+            tabela2 = ["40", "50"]
+            tabela = tabela_mercos.split(',')
+            if len(tabela)>1:
+                for t in tabela:
+                    if t in tabela2:
+                        tabela = "40"
 
-        if tabela[0] in tabela1:
-            grupo_tabela = "10"
-        elif tabela[0] in tabela2:
-            grupo_tabela = "40"
-        else:
-            grupo_tabela = None
+            if tabela[0] in tabela1:
+                grupo_tabela = "10"
+            elif tabela[0] in tabela2:
+                grupo_tabela = "40"
+            else:
+                grupo_tabela = None
 
-        # Identifica a região correta no dicionário
-        if estado == "CE":
-            regra_regiao = "CE"
-            faixas = regras_preco.get(regra_regiao, {})
+            # Identifica a região correta no dicionário
+            if estado == "CE":
+                regra_regiao = "CE"
+                faixas = regras_preco.get(regra_regiao, {})
+                for (minimo, maximo), preco in faixas.items():
+                    if minimo <= valor_pedido <= maximo:
+                        return preco
+                # grupo_tabela = "todas"  # CE ignora o tipo de tabela nas suas regras
+            elif estado in nordeste:
+                regra_regiao = "nordeste"
+            elif estado in norte:
+                regra_regiao = "norte"
+            else:
+                regra_regiao = "outras"
+
+            # Busca as faixas de valores baseadas na região e tabela detectadas
+            faixas = regras_preco.get(regra_regiao, {}).get(grupo_tabela, {})
+
+            # Varre as faixas para encontrar o preço correspondente
             for (minimo, maximo), preco in faixas.items():
                 if minimo <= valor_pedido <= maximo:
-                    return preco
-            # grupo_tabela = "todas"  # CE ignora o tipo de tabela nas suas regras
-        elif estado in nordeste:
-            regra_regiao = "nordeste"
-        elif estado in norte:
-            regra_regiao = "norte"
-        else:
-            regra_regiao = "outras"
-
-        # Busca as faixas de valores baseadas na região e tabela detectadas
-        faixas = regras_preco.get(regra_regiao, {}).get(grupo_tabela, {})
-
-        # Varre as faixas para encontrar o preço correspondente
-        for (minimo, maximo), preco in faixas.items():
-            if minimo <= valor_pedido <= maximo:
-                # return preco
-                self.frete_tabelado = preco
-        return 0  
+                    # return preco
+                    self.frete_tabelado = preco
+            return 0
 
     def itens_fabrica(self):
         df = self.produtos

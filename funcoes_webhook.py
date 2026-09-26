@@ -22,13 +22,19 @@ def dados_atualizados_pedido(driver):
     qtd_itens = driver.find_element(By.XPATH, '//*[@id="rodape_itens_pedido_js"]/div[1]/div[1]/div[2]/strong').text.replace('.','')
     qtd_total = driver.find_element(By.XPATH, '//*[@id="rodape_itens_pedido_js"]/div[1]/div[2]/div[2]/strong').text.replace('.','')
     valor_pedido = driver.find_element(By.CLASS_NAME, 'rodape-valor-total').text
+    transportadora = driver.find_element(By.XPATH, '//*[@id="informacoes_complementares"]/div/div/div[3]/div[2]/div/div[2]').text
     link_mercos = driver.current_url
     vendedor = driver.find_element(By.XPATH, '//*[@id="informacoes_complementares"]/div/div/div[1]/div[4]/div/div[2]').text
     time = equipe(vendedor)
     valor_separado = valor_pedido.split()[1].replace('.','').replace(',','.')
     decimal = Decimal(valor_separado)
     valor_ajustado = float(decimal)
-    return (qtd_itens, qtd_total, valor_ajustado, link_mercos, vendedor, time)
+    excursao = False
+    if ":" in transportadora:
+        excursao = transportadora
+        t = transportadora.split(":")[0]
+        transportadora = t
+    return (qtd_itens, qtd_total, valor_ajustado, link_mercos, vendedor, time, transportadora, excursao)
 
 def download_danfe(danfe_url, numero_nf, pedido):
     url = danfe_url

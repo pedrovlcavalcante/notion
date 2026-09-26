@@ -389,7 +389,7 @@ if st.session_state.cotacao_gerada and st.session_state.payload_cotacao:
         f"{texto_caixas}\n\n"
         f"{total_vols} VOLUMES\n\n"
         f"PESO TOTAL: {peso_final} KG\n"
-        f"NF: R$ {valor_final:.2f}\n"  # Adicionei a formatação de dinheiro que você colocou no print
+        f"NF: R$ {valor_final:.2f}\n"
         f"PEDIDO {numero_pesquisa}"
         )   
 

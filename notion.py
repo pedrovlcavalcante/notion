@@ -161,16 +161,17 @@ def consulta_boletos(source=data_source_id):
     boletos = requests.post(url, headers=headers, json=payload)
     return boletos
 
-def procura(pedido, source=data_source_id):
+def procura(pedido, titulo="Nome", source=data_source_id):
     url = f'https://api.notion.com/v1/data_sources/{source}/query'
     headers = {
         "Notion-Version": "2026-03-11",
         "Authorization": f"Bearer {token}",
     }
+
     payload = {
         "filter":{
             "title":{"equals":f"{pedido}"},
-            "property":"Nome"
+            "property":titulo
         }
     }
     pesquisa = requests.post(url, headers=headers, json=payload)
@@ -472,17 +473,24 @@ def seta_nf(id, nf):
         print(atualizados.json())
     return atualizados
 
-def atualiza_cotacao(id, data_cotacao, valor_frete, prazo):
+def atualiza_cotacao(id, data_cotacao=0, valor_cotacao=0, prazo=0, pre_nota=False, nota_cheia=False):
     url = f"https://api.notion.com/v1/pages/{id}"
 
-    payload = {
-        "properties":{
-            "DATA COTAÇÃO BRASPRESS":{"date":{"start":f"{data_cotacao}"}},
-            "COTAÇÃO BRASPRESS":{"number":valor_frete},
-            "PRAZO BRASPRESS":{"number":prazo},
+    if not pre_nota:
+        payload = {
+            "properties":{
+                "DATA COTAÇÃO BRASPRESS":{"date":{"start":f"{data_cotacao}"}},
+                "COTAÇÃO BRASPRESS":{"number":valor_cotacao},
+                "PRAZO BRASPRESS":{"number":prazo},
+            }
         }
-    }
-
+    else:
+        payload = {
+            "properties":{
+                "FRETE TOTAL":{"number":valor_cotacao},
+                "NOTA CHEIA":{"checkbox":nota_cheia}
+            }
+        }
     headers = {
             "Notion-Version": "2026-03-11",
             "Authorization": f'Bearer {token}',
@@ -498,7 +506,7 @@ def atualiza_cotacao(id, data_cotacao, valor_frete, prazo):
 
 def atualiza_dados_faturamento(id, dados_atualizados):
     url = f"https://api.notion.com/v1/pages/{id}"
-    qtd_itens, qtd_total, valor_pedido, link_mercos, vendedor, time = dados_atualizados
+    qtd_itens, qtd_total, valor_pedido, link_mercos, vendedor, time, transportadora, excursao = dados_atualizados
     payload = {
         "properties":{
             "ITENS NO PEDIDO": {
@@ -530,6 +538,13 @@ def atualiza_dados_faturamento(id, dados_atualizados):
                 "rich_text":[{
                     "text":{"content":time}
                 }]
+            },
+            "TRANSPORTADORA":{
+                "select":{"name":transportadora}
+            },
+            "EXCURSÃO":{
+                "type":"rich_text",
+                "rich_text":[{"text":{"content":excursao}}]
             }
         }
     }
@@ -537,7 +552,8 @@ def atualiza_dados_faturamento(id, dados_atualizados):
             "Notion-Version": "2026-03-11",
             "Authorization": f'Bearer {token}',
         }
-    
+    if not excursao:
+        payload["properties"].pop("EXCURSÃO")
     atualizados = requests.patch(url, headers=headers, json=payload)
     if atualizados.status_code == 200:
         print(f"Pedido atualizado com sucesso")

@@ -11,14 +11,15 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 import time
-from notion import login_mercus
+from notion import login_mercus, atualiza_cotacao, procura, cria_cotacao
 from dotenv import load_dotenv
-from dependencias import selenium_esta_rodando, regras_preco
+from dependencias import selenium_esta_rodando, regras_preco, cidades_rm
 import os
 
 load_dotenv("credentials.env")
 app_key = os.getenv("APP_KEY")
 app_secret = os.getenv("APP_SECRET")
+cotacao_id = os.getenv("COTACAO")
 
 grupo_zigg = ["ZIGG-ZAGG DISTRIBUIDORA - FILIAL", "ZIGG-ZAGG DISTRIBUIDORA", "BELA BIJU"]
 
@@ -49,51 +50,56 @@ def inclui_parcela(parcela):
     # print(parcelas.json())
     return (codigo_nova_parcela, status, desc_status)
 
-def preco_tabelado(tabela_mercos: str, estado, valor_pedido):
+def preco_tabelado(tabela_mercos: str, estado, cidade, valor_pedido):
     # Agrupamentos de estados
-    nordeste = ["AL", "BA", "MA", "PB", "PE", "PI", "RN", "SE"]
-    norte = ["AC", "AP", "AM", "PA", "RO", "RR", "TO"]
-
-    # Identifica o grupo da tabela ("10" ou "40")
-    tabela1 = ["10", "20", "30"]
-    tabela2 = ["40", "50"]
-    tabela = tabela_mercos.split(',')
-    if len(tabela)>1:
-        for t in tabela:
-            if t in tabela2:
-                tabela = "40"
-
-    if tabela[0] in tabela1:
-        grupo_tabela = "10"
-    elif tabela[0] in tabela2:
-        grupo_tabela = "40"
+    if cidade.upper() in cidades_rm:
+        if valor_pedido < 1200:
+            return 33
+        else:
+            return 0
     else:
-        grupo_tabela = None
+        nordeste = ["AL", "BA", "MA", "PB", "PE", "PI", "RN", "SE"]
+        norte = ["AC", "AP", "AM", "PA", "RO", "RR", "TO"]
 
-    # Identifica a região correta no dicionário
-    if estado == "CE":
-        regra_regiao = "CE"
-        faixas = regras_preco.get(regra_regiao, {})
+        # Identifica o grupo da tabela ("10" ou "40")
+        tabela1 = ["10", "20", "30"]
+        tabela2 = ["40", "50"]
+        tabela = tabela_mercos.split(',')
+        if len(tabela)>1:
+            for t in tabela:
+                if t in tabela2:
+                    tabela = "40"
+
+        if tabela[0] in tabela1:
+            grupo_tabela = "10"
+        elif tabela[0] in tabela2:
+            grupo_tabela = "40"
+        else:
+            grupo_tabela = None
+
+        # Identifica a região correta no dicionário
+        if estado == "CE":
+            regra_regiao = "CE"
+            faixas = regras_preco.get(regra_regiao, {})
+            for (minimo, maximo), preco in faixas.items():
+                if minimo <= valor_pedido <= maximo:
+                    return preco
+            # grupo_tabela = "todas"  # CE ignora o tipo de tabela nas suas regras
+        elif estado in nordeste:
+            regra_regiao = "nordeste"
+        elif estado in norte:
+            regra_regiao = "norte"
+        else:
+            regra_regiao = "outras"
+
+        # Busca as faixas de valores baseadas na região e tabela detectadas
+        faixas = regras_preco.get(regra_regiao, {}).get(grupo_tabela, {})
+
+        # Varre as faixas para encontrar o preço correspondente
         for (minimo, maximo), preco in faixas.items():
             if minimo <= valor_pedido <= maximo:
                 return preco
-        # grupo_tabela = "todas"  # CE ignora o tipo de tabela nas suas regras
-    elif estado in nordeste:
-        regra_regiao = "nordeste"
-    elif estado in norte:
-        regra_regiao = "norte"
-    else:
-        regra_regiao = "outras"
-
-    # Busca as faixas de valores baseadas na região e tabela detectadas
-    faixas = regras_preco.get(regra_regiao, {}).get(grupo_tabela, {})
-
-    # Varre as faixas para encontrar o preço correspondente
-    for (minimo, maximo), preco in faixas.items():
-        if minimo <= valor_pedido <= maximo:
-            return preco
-
-    return 0  
+        return 0  
         
 def pega_cfop(cod_cliente):
     url = 'https://app.omie.com.br/api/v1/geral/clientes/'
@@ -120,11 +126,14 @@ def pega_cfop(cod_cliente):
             continue
             # print(consulta.json())
     estado = consulta.json()["estado"]
+    cidade_antes = consulta.json()["cidade"]
+    cidade_lista = cidade_antes.split()
+    cidade = " ".join(cidade_lista[0:-1])
     if estado == "CE":
         cfop = "5.405"
     else:
         cfop = "6.102"
-    return (cfop, estado)
+    return (cfop, estado, cidade)
 
 def deleta_prenota(cod_integracao):
     url = 'https://app.omie.com.br/api/v1/produtos/pedido/'
@@ -353,7 +362,7 @@ def cria_pedido(parametros):
                 return True
         return True
 
-def menu_inicial():
+def menu_inicial(transportadora, valor_nf, cidade, estado):
     while True:
         try:
             volumes = input('Digite a quantidade de volumes: ')
@@ -371,14 +380,50 @@ def menu_inicial():
         if mod_frete == "":
             mod_frete = "9"
 
-    valor_frete = input('Digite o valor da cotação: ')
-    if valor_frete == "":
-        valor_frete = 0
-    try:
-        valor_frete = float(valor_frete.replace(",", "."))
-    except Exception as e:
-        print("Frete inválido")
-        valor_frete = 0
+    if transportadora == "CB EXPRESS":
+        valor_frete = 0.045*valor_nf
+        if valor_frete < 50:
+            valor_frete = 50
+    elif transportadora == "EXPRESS FORTALEZA":
+        valor_frete = 0.045*valor_nf
+        if valor_frete < 33:
+            valor_frete = 33
+    elif transportadora == "TRANSCEARA":
+        if estado == "PI":
+            if cidade == "TERESINA":
+                valor_frete = 0.1*valor_nf
+                if valor_frete < 115.70:
+                    valor_frete = 115.70
+            else:
+                valor_frete = 0.12*valor_nf
+                if valor_frete < 130:
+                    valor_frete = 130
+        elif estado == "MA":
+            if cidade == "SÃO LUIS" or cidade == "SAO LUIS":
+                valor_frete = 0.13*valor_nf
+                if valor_frete < 141:
+                    valor_frete = 141
+            else:
+                valor_frete = 0.15*valor_nf
+                if valor_frete < 163.44:
+                    valor_frete = 163.44
+        elif estado == "PA":
+            valor_frete = 0.16*valor_nf
+            if valor_frete < 184.62:
+                valor_frete = 184.62
+        elif estado == "PE":
+            valor_frete = 0.12*valor_nf
+            if valor_frete < 130.43:
+                valor_frete = 130.43
+    else:
+        valor_frete = input('Digite o valor da cotação: ')
+        if valor_frete == "":
+            valor_frete = 0
+        try:
+            valor_frete = float(valor_frete.replace(",", "."))
+        except Exception as e:
+            print("Frete inválido")
+            valor_frete = 0
     return (mod_frete, volumes, valor_frete)
 
 def info_pedido(pedido, valor_pedido):
@@ -501,129 +546,144 @@ def preco_zerado(preco):
         return preco
 
 def configuracoes():
-    pedido = input('Digite o numero do pedido ou Digite 0 para encerrar: ')
-    if pedido == "0":
+    pedidos = input('Digite um ou mais pedidos separados por virgula ou 0 para encerrar: ')
+    if pedidos == "0":
         return False
     
-    salva_html(pedido)
-    file_path = f"pedidos\\{pedido}.html"
+    pedidos_lista = pedidos.split(",")
+    for pedido in pedidos_lista:    
+        salva_html(pedido)
+        file_path = f"pedidos\\{pedido}.html"
 
-    while True:
-        if os.path.exists(file_path):
-            df = pd.read_html(
-                file_path, attrs={"id": "tabela_itens_pedido"}
-            )[0].drop(columns=["Foto", "Desc. Acrés.", "Preço Tab."]).drop_duplicates(keep=False)
-            break
-        else:
-            foi = input("O arquivo foi gerado/baixado? Digite 1 para tentar novamente ou outro valor para sair: ")
-            if foi == "1":
-                continue
-            else:
-                print("Monitoramento encerrado pelo usuário.")
+        while True:
+            if os.path.exists(file_path):
+                df = pd.read_html(
+                    file_path, attrs={"id": "tabela_itens_pedido"}
+                )[0].drop(columns=["Foto", "Desc. Acrés.", "Preço Tab."]).drop_duplicates(keep=False)
                 break
+            else:
+                foi = input("O arquivo foi gerado/baixado? Digite 1 para tentar novamente ou outro valor para sair: ")
+                if foi == "1":
+                    continue
+                else:
+                    print("Monitoramento encerrado pelo usuário.")
+                    break
 
-    df = df[~df['Código'].str.startswith('Observações:', na=False)]
-    df.dropna(how='all', inplace=True)
-    df.dropna(how='all', inplace=True, axis=1)
-    df.reset_index(inplace=True, drop=True)
+        df = df[~df['Código'].str.startswith('Observações:', na=False)]
+        df.dropna(how='all', inplace=True)
+        df.dropna(how='all', inplace=True, axis=1)
+        df.reset_index(inplace=True, drop=True)
+            
+        preco_liq = df['Preço Líq.'].apply(lambda x: x.split()[1].replace(",",".")).astype(float)
+        subtotal = df['Subtotal'].apply(lambda x: x.split()[1].replace(".","").replace(",",".")).astype(float)
+        qtde = df['Qtde.'].apply(lambda x: x.split()[0].replace(".","")).astype(int)
+        df["Preço Líq."] = preco_liq
+        df["Qtde."] = qtde
+        try:
+            df['codigos_omie'] = busca_codigos_produtos(df["Código"])
+        except Exception as e:
+            codigos_para_atualizar = busca_codigos_produtos(df["Código"])
+            print(codigos_para_atualizar)
+            codigos_novos = {}
+            for cod in codigos_para_atualizar:
+                substituto = input(f"Digite o substituto para o codigo {cod}: ")
+                codigos_novos[cod] = substituto.replace("\t", "").strip()
+            with open("substituto.json", "rb") as file:
+                subs = json.load(file)
+                subs.update(codigos_novos)
+            with open("substituto.json", "w", encoding="utf-8") as file:
+                    json.dump(subs, file, indent=4)
+            df['codigos_omie'] = busca_codigos_produtos(df["Código"])
+
+        valor_pedido = subtotal.sum()
         
-    preco_liq = df['Preço Líq.'].apply(lambda x: x.split()[1].replace(",",".")).astype(float)
-    subtotal = df['Subtotal'].apply(lambda x: x.split()[1].replace(".","").replace(",",".")).astype(float)
-    qtde = df['Qtde.'].apply(lambda x: x.split()[0].replace(".","")).astype(int)
-    df["Preço Líq."] = preco_liq
-    df["Qtde."] = qtde
-    try:
-        df['codigos_omie'] = busca_codigos_produtos(df["Código"])
-    except Exception as e:
-        codigos_para_atualizar = busca_codigos_produtos(df["Código"])
-        print(codigos_para_atualizar)
-        codigos_novos = {}
-        for cod in codigos_para_atualizar:
-            substituto = input(f"Digite o substituto para o codigo {cod}: ")
-            codigos_novos[cod] = substituto.replace("\t", "").strip()
-        with open("substituto.json", "rb") as file:
-            subs = json.load(file)
-            subs.update(codigos_novos)
-        with open("substituto.json", "w", encoding="utf-8") as file:
-                json.dump(subs, file, indent=4)
-        df['codigos_omie'] = busca_codigos_produtos(df["Código"])
 
-    valor_pedido = subtotal.sum()
-    
+        cod_integracao, cliente, cnpj_cpf, num_pedido_mercos, parcela, transportadora, porcentagem, tabela, destino, vendedor = info_pedido(pedido, valor_pedido)
+        
+        cod_cliente = busca_codigo_cliente(cnpj_cpf)
+        cod_parcela = busca_codigo_parcela(parcela)
+        cod_transportadora = busca_codigo_transportadora(transportadora)
 
-    cod_integracao, cliente, cnpj_cpf, num_pedido_mercos, parcela, transportadora, porcentagem, tabela, destino, vendedor = info_pedido(pedido, valor_pedido)
-    
-    cod_cliente = busca_codigo_cliente(cnpj_cpf)
-    cod_parcela = busca_codigo_parcela(parcela)
-    cod_transportadora = busca_codigo_transportadora(transportadora)
+        cfop, estado, cidade = pega_cfop(cod_cliente)
 
-    cfop, estado = pega_cfop(cod_cliente)
+        try:
+            if cliente in grupo_zigg:
+                pct = 0.12
 
-    try:
-        if cliente in grupo_zigg:
-            pct = 0.12
+            else:
+                pct = int(porcentagem)/100
+        except Exception as e:
+            pct = 0.2
 
+        p = input("Porcentagem diferente: ")
+        if p == "":
+            pass
         else:
-            pct = int(porcentagem)/100
-    except Exception as e:
-        pct = 0.2
+            try:
+                pct = int(p)/100
+            except:
+                print("Valor inválido")
 
-    p = input("Porcentagem diferente: ")
-    if p == "":
-        pass
-    else:
-        try:
-            pct = int(p)/100
-        except:
-            print("Valor inválido")
-
-    parc = input("Parcelamento diferente: ")
-    if parc == "":
-        pass
-    else:
-        try:
-            parcela = parc
-            cod_parcela = busca_codigo_parcela(parcela)
-        except:
-            print("Valor inválido")
-    
-    df['valor'] = df['Preço Líq.']*pct
-    df['valor'] = df['valor'].apply(preco_zerado)
-    valor_nf = valor_pedido*pct
-
-    frete_tabelado = preco_tabelado(tabela, estado, valor_pedido)
-
-    mod_frete, volumes, valor_cotacao = menu_inicial()
-
-    if mod_frete == "9":
-        cod_transportadora = False
-        valor_cotacao = 0
-
-    if porcentagem == "100":
-        frete_nota = valor_cotacao
-    else:
+        parc = input("Parcelamento diferente: ")
+        if parc == "":
+            pass
+        else:
+            try:
+                parcela = parc
+                cod_parcela = busca_codigo_parcela(parcela)
+            except:
+                print("Valor inválido")
         
-        if (valor_cotacao < frete_tabelado) or valor_pedido < 2000:
+        df['valor'] = df['Preço Líq.']*pct
+        df['valor'] = df['valor'].apply(preco_zerado)
+        valor_nf = valor_pedido*pct
+
+        frete_tabelado = preco_tabelado(tabela, estado, cidade, valor_pedido)
+
+        mod_frete, volumes, valor_cotacao = menu_inicial(transportadora, valor_nf, cidade, estado)
+
+        if mod_frete == "9":
+            cod_transportadora = False
+            valor_cotacao = 0
+
+        nota_cheia = False
+        if pct == 1.0:
             frete_nota = valor_cotacao
+            nota_cheia = True
         else:
-            frete_nota = frete_tabelado
+            if (valor_cotacao < frete_tabelado) or valor_pedido < 2000:
+                frete_nota = valor_cotacao
+            else:
+                frete_nota = frete_tabelado
 
-    if mod_frete == "0" and transportadora == "P/ SÃO PAULO":
-        cod_transportadora = 10021638182
-    
-    sucesso = deleta_prenota(cod_integracao)
-    painel_informativo(pedido, cliente, parcela, transportadora, frete_tabelado, valor_pedido, valor_nf, pct, tabela, mod_frete, volumes, valor_cotacao, frete_nota, destino, vendedor)
-    print("Ajustando pré nota...")
-    codigo_omie = (zip(df['codigos_omie'], df['Qtde.'], df['valor']))
-    return (cod_integracao, cod_cliente, cod_parcela, codigo_omie, cfop, cod_transportadora, mod_frete, volumes, frete_nota, num_pedido_mercos, sucesso)
+        if mod_frete == "0" and transportadora == "P/ SÃO PAULO":
+            cod_transportadora = 10021638182
+        
+        sucesso = deleta_prenota(cod_integracao)
+        painel_informativo(pedido, cliente, parcela, transportadora, frete_tabelado, valor_pedido, valor_nf, pct, tabela, mod_frete, volumes, valor_cotacao, frete_nota, destino, vendedor)
+        
+        pagina_cotacao = procura(pedido, titulo="COTACAO", source=cotacao_id)
+        try:
+            id_cotacao = pagina_cotacao.json()['results'][0]['id']
+        except:
+            print('entrou na excessao')
+            pagina_pedido = procura(pedido)
+            id_pedido = pagina_pedido.json()['results'][0]['id']
+            pagina_cotacao = cria_cotacao(pedido, id_pedido, frete_tabelado)
+            id_cotacao = pagina_cotacao.json()['id']
+        atualiza_cotacao(id=id_cotacao, valor_cotacao=valor_cotacao, pre_nota=True, nota_cheia=nota_cheia)
+        print("Ajustando pré nota...")
+        codigo_omie = (zip(df['codigos_omie'], df['Qtde.'], df['valor']))
+        parametros = (cod_integracao, cod_cliente, cod_parcela, codigo_omie, cfop, cod_transportadora, mod_frete, volumes, frete_nota, num_pedido_mercos, sucesso)
+        cria_pedido(parametros)
+    return True
 
 def executa():
     parametros = True
-    while parametros:
+    while parametros:   
         parametros = configuracoes()
         if not parametros:
             break
-        cria_pedido(parametros)
     print("Encerrando execução")
 
 if __name__=="__main__":
