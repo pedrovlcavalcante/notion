@@ -5,6 +5,7 @@ import time
 import unicodedata
 import pandas as pd
 from dotenv import load_dotenv
+from notion import procura, consulta_clientes_incompletos, atualiza_clientes_notion, clientes as clientesid
 import os
 
 load_dotenv("credentials.env")
@@ -98,6 +99,21 @@ def atualiza_parcelas():
     with open("parcelas.json", "w", encoding="utf-8") as file:
         json.dump(base_parcelas, file, indent=4)
     return "Base parcelas atualizada"
+
+def atualiza_base_notion():
+    print("Atulizando base Notion")
+    with open("clientes.json", "r", encoding='utf-8') as file:
+        clientes = json.load(file)
+        clientes_para_atualizar = consulta_clientes_incompletos()
+        print(clientes_para_atualizar)
+        for cliente in clientes_para_atualizar:
+            resultado = procura(cliente, "CNPJ/CPF", clientesid)
+            id_pagina = resultado.json()['results'][0]['id']
+            if cliente not in clientes.keys():
+                continue
+            codigo_omie = clientes[cliente]['codigo']
+            print(clientes[cliente]['fantasia'])
+            atualiza_clientes_notion(id_pagina, codigo_omie)
 
 def requisita_clientes(pagina):
     url = 'https://app.omie.com.br/api/v1/geral/clientes/'
@@ -204,6 +220,7 @@ if __name__=='__main__':
     atualiza_produtos()
     atualiza_parcelas()
     atualiza_clientes()
+    atualiza_base_notion()
     # cadastra_clientes()
 
 

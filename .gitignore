@@ -228,3 +228,4 @@ pedidos
 
 # Outros
 cookies.pkl
+*.csv

@@ -52,54 +52,48 @@ def inclui_parcela(parcela):
 
 def preco_tabelado(tabela_mercos: str, estado, cidade, valor_pedido):
     # Agrupamentos de estados
-    if cidade.upper() in cidades_rm:
-        if valor_pedido < 1200:
-            return 33
-        else:
-            return 0
+    nordeste = ["AL", "BA", "MA", "PB", "PE", "PI", "RN", "SE"]
+    norte = ["AC", "AP", "AM", "PA", "RO", "RR", "TO"]
+
+    # Identifica o grupo da tabela ("10" ou "40")
+    tabela1 = ["10", "20", "30"]
+    tabela2 = ["40", "50"]
+    tabela = tabela_mercos.split(',')
+    if len(tabela)>1:
+        for t in tabela:
+            if t in tabela2:
+                tabela = "40"
+
+    if tabela[0] in tabela1:
+        grupo_tabela = "10"
+    elif tabela[0] in tabela2:
+        grupo_tabela = "40"
     else:
-        nordeste = ["AL", "BA", "MA", "PB", "PE", "PI", "RN", "SE"]
-        norte = ["AC", "AP", "AM", "PA", "RO", "RR", "TO"]
+        grupo_tabela = None
 
-        # Identifica o grupo da tabela ("10" ou "40")
-        tabela1 = ["10", "20", "30"]
-        tabela2 = ["40", "50"]
-        tabela = tabela_mercos.split(',')
-        if len(tabela)>1:
-            for t in tabela:
-                if t in tabela2:
-                    tabela = "40"
-
-        if tabela[0] in tabela1:
-            grupo_tabela = "10"
-        elif tabela[0] in tabela2:
-            grupo_tabela = "40"
-        else:
-            grupo_tabela = None
-
-        # Identifica a região correta no dicionário
-        if estado == "CE":
-            regra_regiao = "CE"
-            faixas = regras_preco.get(regra_regiao, {})
-            for (minimo, maximo), preco in faixas.items():
-                if minimo <= valor_pedido <= maximo:
-                    return preco
-            # grupo_tabela = "todas"  # CE ignora o tipo de tabela nas suas regras
-        elif estado in nordeste:
-            regra_regiao = "nordeste"
-        elif estado in norte:
-            regra_regiao = "norte"
-        else:
-            regra_regiao = "outras"
-
-        # Busca as faixas de valores baseadas na região e tabela detectadas
-        faixas = regras_preco.get(regra_regiao, {}).get(grupo_tabela, {})
-
-        # Varre as faixas para encontrar o preço correspondente
+    # Identifica a região correta no dicionário
+    if estado == "CE":
+        regra_regiao = "CE"
+        faixas = regras_preco.get(regra_regiao, {})
         for (minimo, maximo), preco in faixas.items():
             if minimo <= valor_pedido <= maximo:
                 return preco
-        return 0  
+        # grupo_tabela = "todas"  # CE ignora o tipo de tabela nas suas regras
+    elif estado in nordeste:
+        regra_regiao = "nordeste"
+    elif estado in norte:
+        regra_regiao = "norte"
+    else:
+        regra_regiao = "outras"
+
+    # Busca as faixas de valores baseadas na região e tabela detectadas
+    faixas = regras_preco.get(regra_regiao, {}).get(grupo_tabela, {})
+
+    # Varre as faixas para encontrar o preço correspondente
+    for (minimo, maximo), preco in faixas.items():
+        if minimo <= valor_pedido <= maximo:
+            return preco
+    return 0  
         
 def pega_cfop(cod_cliente):
     url = 'https://app.omie.com.br/api/v1/geral/clientes/'
@@ -293,7 +287,7 @@ def gera_produtos(cod_produtos, cfop):
     return det
 
 def cria_pedido(parametros):
-    cod_integracao, cod_cliente, cod_parcela, cod_produtos, cfop, cod_transportadora, mod_frete, volumes, valor_frete, num_pedido_mercos, sucesso = parametros
+    cod_integracao, cod_cliente, cod_parcela, cod_produtos, cfop, cod_transportadora, mod_frete, volumes, valor_frete, num_pedido_mercos, sucesso, peso_bruto = parametros
     tentativa = 1
     if not sucesso:
         cod_integracao = f"pedido{num_pedido_mercos}t{tentativa}"
@@ -321,7 +315,8 @@ def cria_pedido(parametros):
                     "codigo_transportadora":cod_transportadora,
                     "modalidade": f"{mod_frete}",
                     "quantidade_volumes":volumes,
-                    "valor_frete":valor_frete
+                    "valor_frete":valor_frete,
+                    "peso_bruto":peso_bruto
                 },
                 "informacoes_adicionais": {
                     "codigo_categoria": "1.01.03",
@@ -362,32 +357,36 @@ def cria_pedido(parametros):
                 return True
         return True
 
-def menu_inicial(transportadora, valor_nf, cidade, estado):
+def menu_inicial(transportadora, valor_nf, cidade, estado, planilha):
     while True:
-        try:
-            volumes = input('Digite a quantidade de volumes: ')
-            if volumes == "":
-                    volumes = 1
-            volumes = int(volumes)
-            break
-        except Exception as e:
-            print("Valor inválido")
+        if planilha == "0":
+            try:
+                volumes = input('Digite a quantidade de volumes: ')
+                if volumes == "":
+                        volumes = 1
+                volumes = int(volumes)
+                break
+            except Exception as e:
+                print("Valor inválido")
 
-    mod_frete = input('Digite a modalidade de frete: 0 - CIF, 1 - FOB, 9 - Sem Frete: ')
-    while mod_frete not in ["0", "1", "9"]:
-        print("Opção inválida")
-        mod_frete = input('Digite a modalidade de frete: 0 - CIF, 1 - FOB, 9 - Sem Frete: ')
-        if mod_frete == "":
-            mod_frete = "9"
+            mod_frete = input('Digite a modalidade de frete: 0 - CIF, 1 - FOB, 9 - Sem Frete: ')
+            while mod_frete not in ["0", "1", "9"]:
+                print("Opção inválida")
+                mod_frete = input('Digite a modalidade de frete: 0 - CIF, 1 - FOB, 9 - Sem Frete: ')
+                if mod_frete == "":
+                    mod_frete = "9"
+        else:
+            break
 
     if transportadora == "CB EXPRESS":
         valor_frete = 0.045*valor_nf
         if valor_frete < 50:
             valor_frete = 50
     elif transportadora == "EXPRESS FORTALEZA":
-        valor_frete = 0.045*valor_nf
-        if valor_frete < 33:
+        if valor_nf < 240:
             valor_frete = 33
+        else:
+            valor_frete = 0
     elif transportadora == "TRANSCEARA":
         if estado == "PI":
             if cidade == "TERESINA":
@@ -416,15 +415,19 @@ def menu_inicial(transportadora, valor_nf, cidade, estado):
             if valor_frete < 130.43:
                 valor_frete = 130.43
     else:
-        valor_frete = input('Digite o valor da cotação: ')
-        if valor_frete == "":
-            valor_frete = 0
-        try:
-            valor_frete = float(valor_frete.replace(",", "."))
-        except Exception as e:
-            print("Frete inválido")
-            valor_frete = 0
-    return (mod_frete, volumes, valor_frete)
+        if planilha == "0":
+            valor_frete = input('Digite o valor da cotação: ')
+            if valor_frete == "":
+                valor_frete = 0
+            try:
+                valor_frete = float(valor_frete.replace(",", "."))
+            except Exception as e:
+                print("Frete inválido")
+                valor_frete = 0
+            return (mod_frete, volumes, valor_frete)
+        else:
+            return(0,0,0)
+    return(0,0,valor_frete)
 
 def info_pedido(pedido, valor_pedido):
     try:
@@ -510,7 +513,7 @@ def painel_informativo(pedido, cliente, parcela, transportadora, frete_tabelado,
     nf_formatado = f"R$ {valor_nf:,.2f}"
     frete_nf_formatado = f"R$ {frete_nota:,.2f}"
     frete_formatado = f"R$ {frete_tabelado:,.2f}" if isinstance(frete_tabelado, (int, float)) else frete_tabelado
-    match mod_frete:
+    match str(mod_frete):
         case "0":
             mod_frete_formatado = "CIF"
         case "1":
@@ -546,11 +549,17 @@ def preco_zerado(preco):
         return preco
 
 def configuracoes():
-    pedidos = input('Digite um ou mais pedidos separados por virgula ou 0 para encerrar: ')
-    if pedidos == "0":
+    planilha = input("Escolha o modo de Faturamento - 1: Planilha - 0: Tela: ")
+    if planilha == "1":
+        pl = pd.read_csv("dados_faturamento.csv", sep=';', na_filter='')
+        pedidos_lista = pl['pedido'].to_list()
+        pedidos = 1
+    else:
+        pedidos = input('Digite um ou mais pedidos separados por virgula ou 0 para encerrar: ')
+        pedidos_lista = pedidos.split(",")
+    if pedidos == "0" or pedidos == "":
         return False
     
-    pedidos_lista = pedidos.split(",")
     for pedido in pedidos_lista:    
         salva_html(pedido)
         file_path = f"pedidos\\{pedido}.html"
@@ -615,24 +624,34 @@ def configuracoes():
         except Exception as e:
             pct = 0.2
 
-        p = input("Porcentagem diferente: ")
-        if p == "":
-            pass
-        else:
-            try:
+        if planilha == "1":
+            p = str(pl.loc[pl['pedido']==pedido]['porcentagem'].values[0])
+            if p == "":
+                pct = int(porcentagem)/100
+            else:
                 pct = int(p)/100
-            except:
-                print("Valor inválido")
-
-        parc = input("Parcelamento diferente: ")
-        if parc == "":
-            pass
         else:
-            try:
-                parcela = parc
-                cod_parcela = busca_codigo_parcela(parcela)
-            except:
-                print("Valor inválido")
+            p = input("Porcentagem diferente: ")
+            if p == "":
+                pass
+            else:
+                try:
+                    pct = int(p)/100
+                except:
+                    print("Valor inválido")
+
+        if planilha == "0":
+            parc = input("Parcelamento diferente: ")
+        else:
+            parc = str(pl.loc[pl['pedido']==pedido]['parcelamento'].values[0])
+            if parc == "":
+                pass
+            else:
+                try:
+                    parcela = parc
+                    cod_parcela = busca_codigo_parcela(parcela)
+                except:
+                    print("Valor inválido")
         
         df['valor'] = df['Preço Líq.']*pct
         df['valor'] = df['valor'].apply(preco_zerado)
@@ -640,9 +659,15 @@ def configuracoes():
 
         frete_tabelado = preco_tabelado(tabela, estado, cidade, valor_pedido)
 
-        mod_frete, volumes, valor_cotacao = menu_inicial(transportadora, valor_nf, cidade, estado)
+        
+        mod_frete, volumes, valor_cotacao = menu_inicial(transportadora, valor_nf, cidade, estado, planilha)
 
-        if mod_frete == "9":
+        if planilha == "1":
+            mod_frete = pl.loc[pl['pedido']==pedido]['modalidade'].values[0]
+            volumes = int(pl.loc[pl['pedido']==pedido]['volumes'].values[0])
+            valor_cotacao = float(pl.loc[pl['pedido']==pedido]['cotacao'].values[0])
+
+        if mod_frete == "9" or mod_frete == 9:
             cod_transportadora = False
             valor_cotacao = 0
 
@@ -658,6 +683,16 @@ def configuracoes():
 
         if mod_frete == "0" and transportadora == "P/ SÃO PAULO":
             cod_transportadora = 10021638182
+
+        peso_bruto = float(pl.loc[pl['pedido']==pedido]['peso'].values[0])
+        if planilha == "0":
+            if transportadora in ["EXCURSÃO: DAVID TURISMO (GASPAZINHO)", "TRANSPOTYGUAR"]:
+                peso_input = input("Digite o peso: ")
+                try:
+                    peso_bruto = float(peso_input.replace(',','.'))
+                except:
+                    print("Peso inválido.")
+                    peso_bruto = 0
         
         sucesso = deleta_prenota(cod_integracao)
         painel_informativo(pedido, cliente, parcela, transportadora, frete_tabelado, valor_pedido, valor_nf, pct, tabela, mod_frete, volumes, valor_cotacao, frete_nota, destino, vendedor)
@@ -674,7 +709,7 @@ def configuracoes():
         atualiza_cotacao(id=id_cotacao, valor_cotacao=valor_cotacao, pre_nota=True, nota_cheia=nota_cheia)
         print("Ajustando pré nota...")
         codigo_omie = (zip(df['codigos_omie'], df['Qtde.'], df['valor']))
-        parametros = (cod_integracao, cod_cliente, cod_parcela, codigo_omie, cfop, cod_transportadora, mod_frete, volumes, frete_nota, num_pedido_mercos, sucesso)
+        parametros = (cod_integracao, cod_cliente, cod_parcela, codigo_omie, cfop, cod_transportadora, mod_frete, volumes, frete_nota, num_pedido_mercos, sucesso, peso_bruto)
         cria_pedido(parametros)
     return True
 

@@ -18,6 +18,31 @@ mercos_user = os.getenv('MERCUS_USER')
 mercos_password = os.getenv('MERCUS_PASSWORD')
 
 nomes = {}
+
+def consulta_volatil(tipo, source):
+    pass
+
+def consulta_clientes_incompletos(source=clientes):
+    url = f"https://api.notion.com/v1/data_sources/{source}/query"
+
+    headers = {
+        "Notion-Version": "2026-03-11",
+        "Authorization": f"Bearer {token}",
+    }
+
+    payload = {
+        "filter":{
+            "property":"CODIGO OMIE",
+            "number":{"is_empty":True}
+        }
+    }
+    clientes_incompletos = requests.post(url, headers=headers, json=payload)
+    cnpj_lista = []
+    for cliente in clientes_incompletos.json()['results']:
+        cnpj = cliente['properties']['CNPJ/CPF']['title'][0]['text']['content']
+        cnpj_lista.append(cnpj)
+    return cnpj_lista
+
 def equipe(vendedor):
     equipe_elano = ['Alexandre Lima', 'Bernardo', 'Claudiano Ferreira', 'Diana Jaqueline', 
                     'Elano Dias', 'Elisângela Damasceno Silva', 'Gabriel Mota Façanha', 'Kelly Nobre', 'Nara Alexandre', 'Rita de Cássia', 'Wesley Ribeiro', 'Wiler Bastos']
@@ -419,6 +444,29 @@ def atualiza_pedidos(num_pedido, id, equipe, vendedor, cliente, itens, qtd_total
         print(f"Não foi possível atualizar o Pedido {num_pedido}")
         print(atualizados.json())
     return atualizados
+
+def atualiza_clientes_notion(id, codigo_omie):
+    url = f"https://api.notion.com/v1/pages/{id}"
+
+    payload = {
+        "properties":{
+            "CODIGO OMIE":{"number":codigo_omie},
+        }
+    }
+
+    headers = {
+            "Notion-Version": "2026-03-11",
+            "Authorization": f"Bearer {token}",
+        }
+    
+    atualizados = requests.patch(url, headers=headers, json=payload)
+    if atualizados.status_code == 200:
+        print(f"Cliente atualizado com sucesso")
+    else:
+        print(f"Não foi possível atualizar o cliente")
+        print(atualizados.json())
+    return atualizados
+
 
 def seleciona_pedidos(data_atual, data_futura, source=data_source_id, pagina=None):
     url = f"https://api.notion.com/v1/data_sources/{source}/query"
