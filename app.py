@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-import requests, os, base64, textwrap
+import requests, os, base64
 from dotenv import load_dotenv
 from notion import procura, propriedade_cliente, atualiza_cotacao
 from datetime import datetime
@@ -63,10 +63,12 @@ if numero_pesquisa > 0:
         #[0]['title']['text']['content']
         cnpj_destinatario = cnpj_destinatario_bruto.json()['results'][0]['title']['text']['content'].replace('.','').replace('/','').replace('-','')
         cep_destinatario = cep_destinatario_bruto.json()['results'][0]['rich_text']['text']['content'].replace('-','')
+        url = pesquisa.json()['results'][0]['properties']['LINK']['url']
 
         st.write(cnpj_destinatario)
         st.write(cep_destinatario)
-
+        st.write(url)
+        
         data_pedido = pesquisa.json()['results'][0]['properties']['DATA DO PEDIDO']['date']['start']
         pesq_pedido = pesquisa.json()['results'][0]['properties']['Nome']['title'][0]['text']['content']
         input_valor_pedido = pesquisa.json()['results'][0]['properties']['VALOR']['number']

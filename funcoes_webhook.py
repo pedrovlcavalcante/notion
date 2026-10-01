@@ -90,7 +90,9 @@ def pega_pedido_xml(url_xml):
         pedido_nf = compra.find("{http://www.portalfiscal.inf.br/nfe}xPed").text
         transp = info.find("{http://www.portalfiscal.inf.br/nfe}transp")
         mod_frete = transp.find("{http://www.portalfiscal.inf.br/nfe}modFrete").text
-        return (pedido_nf, mod_frete)
+        vol = transp.find("{http://www.portalfiscal.inf.br/nfe}vol")
+        volumes = vol.find("{http://www.portalfiscal.inf.br/nfe}qVol").text
+        return (pedido_nf, mod_frete, volumes)
 
 def upload_danfe(dados):
     numero_nf = dados['event']['numero_nf']
@@ -99,6 +101,7 @@ def upload_danfe(dados):
     if type(info_pedido) == str:
         return
     pedido = info_pedido[0]
+    volumes = info_pedido[2]
     output_filename = f"nota_fiscal_saida_{numero_nf}_pedido_{pedido}.pdf"
     output_dir = "C:\\Users\\Lomil Etiquetas\\Desktop\\NFS"
     file = os.path.join(output_dir, output_filename)
@@ -186,7 +189,7 @@ def upload_danfe(dados):
             dados_atualizados = dados_atualizados_pedido(driver)
             print("Dados atualizados do pedido capturadas", dados_atualizados)
             id_pedido = id_pedido_notion(pedido)[0]
-            atualiza_dados_faturamento(id_pedido, dados_atualizados)
+            atualiza_dados_faturamento(id_pedido, dados_atualizados, volumes)
             driver.quit()
         except Exception as e:
             print("Erro na atualização dos dados do pedido ", e)
@@ -232,7 +235,7 @@ def processar_dados_webhook(dados):
         file_path = download_danfe(danfe, numero_nf, pedido)
         download_xml(xml, numero_nf, pedido)
         
-        
+
         id_pedido, transportadora = id_pedido_notion(pedido)
         seta_nf(id_pedido, numero_nf)
         
@@ -240,7 +243,7 @@ def processar_dados_webhook(dados):
         print("Modalidade: ", mod_frete)
         print("Pedido: ", pedido, " - NF: ", numero_nf)
         
-        if mod_frete == '0' or transportadora == 'EXCURSÃO':
+        if mod_frete == '0' or transportadora.startswith('EXCURSÃO'):
             imprime_nf(file_path)
             print(f"Processo de impresssão do pedido {pedido}!")
             

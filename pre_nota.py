@@ -1,20 +1,16 @@
-import requests
-from datetime import datetime
-import json
-import pandas as pd
-from bs4 import BeautifulSoup
+import os, json, time, requests, pandas as pd
 
+from bs4 import BeautifulSoup
+from datetime import datetime
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
-import time
 from notion import login_mercus, atualiza_cotacao, procura, cria_cotacao
 from dotenv import load_dotenv
 from dependencias import selenium_esta_rodando, regras_preco, cidades_rm
-import os
 
 load_dotenv("credentials.env")
 app_key = os.getenv("APP_KEY")
@@ -22,8 +18,6 @@ app_secret = os.getenv("APP_SECRET")
 cotacao_id = os.getenv("COTACAO")
 
 grupo_zigg = ["ZIGG-ZAGG DISTRIBUIDORA - FILIAL", "ZIGG-ZAGG DISTRIBUIDORA", "BELA BIJU"]
-
-
 
 def inclui_parcela(parcela):
     url = 'https://app.omie.com.br/api/v1/geral/parcelas/'
@@ -357,36 +351,45 @@ def cria_pedido(parametros):
                 return True
         return True
 
-def menu_inicial(transportadora, valor_nf, cidade, estado, planilha):
+def menu_inicial(transportadora):
     while True:
-        if planilha == "0":
-            try:
-                volumes = input('Digite a quantidade de volumes: ')
-                if volumes == "":
-                        volumes = 1
-                volumes = int(volumes)
-                break
-            except Exception as e:
-                print("Valor inválido")
+        try:
+            volumes = input('Digite a quantidade de volumes: ')
+            if volumes == "":
+                    volumes = 1
+            volumes = int(volumes)
+        except Exception as e:
+            print("Valor inválido")
 
+        mod_frete = input('Digite a modalidade de frete: 0 - CIF, 1 - FOB, 9 - Sem Frete: ')
+        while mod_frete not in ["0", "1", "9"]:
+            print("Opção inválida")
             mod_frete = input('Digite a modalidade de frete: 0 - CIF, 1 - FOB, 9 - Sem Frete: ')
-            while mod_frete not in ["0", "1", "9"]:
-                print("Opção inválida")
-                mod_frete = input('Digite a modalidade de frete: 0 - CIF, 1 - FOB, 9 - Sem Frete: ')
-                if mod_frete == "":
-                    mod_frete = "9"
+            if mod_frete == "":
+                mod_frete = "9"
+        if transportadora not in ["CB EXPRESS", "EXPRESS FORTALEZA", "TRANSCEARA"]:
+            valor_frete = input('Digite o valor da cotação: ')
+            if valor_frete == "":
+                valor_frete = 0
+            try:
+                valor_frete = float(valor_frete.replace(",", "."))
+            except Exception as e:
+                print("Frete inválido")
+                valor_frete = 0
         else:
-            break
+            valor_frete = 0
+        return (mod_frete, volumes, valor_frete)
+    
+def frete_diferente(transportadora, valor_nf, cidade, estado):
 
     if transportadora == "CB EXPRESS":
         valor_frete = 0.045*valor_nf
         if valor_frete < 50:
             valor_frete = 50
     elif transportadora == "EXPRESS FORTALEZA":
-        if valor_nf < 240:
+        valor_frete = 0.045*valor_nf
+        if valor_frete < 33:
             valor_frete = 33
-        else:
-            valor_frete = 0
     elif transportadora == "TRANSCEARA":
         if estado == "PI":
             if cidade == "TERESINA":
@@ -414,20 +417,7 @@ def menu_inicial(transportadora, valor_nf, cidade, estado, planilha):
             valor_frete = 0.12*valor_nf
             if valor_frete < 130.43:
                 valor_frete = 130.43
-    else:
-        if planilha == "0":
-            valor_frete = input('Digite o valor da cotação: ')
-            if valor_frete == "":
-                valor_frete = 0
-            try:
-                valor_frete = float(valor_frete.replace(",", "."))
-            except Exception as e:
-                print("Frete inválido")
-                valor_frete = 0
-            return (mod_frete, volumes, valor_frete)
-        else:
-            return(0,0,0)
-    return(0,0,valor_frete)
+    return valor_frete
 
 def info_pedido(pedido, valor_pedido):
     try:
@@ -615,30 +605,23 @@ def configuracoes():
 
         cfop, estado, cidade = pega_cfop(cod_cliente)
 
-        try:
-            if cliente in grupo_zigg:
-                pct = 0.12
-
-            else:
-                pct = int(porcentagem)/100
-        except Exception as e:
-            pct = 0.2
-
         if planilha == "1":
             p = str(pl.loc[pl['pedido']==pedido]['porcentagem'].values[0])
-            if p == "":
-                pct = int(porcentagem)/100
-            else:
-                pct = int(p)/100
         else:
             p = input("Porcentagem diferente: ")
-            if p == "":
-                pass
-            else:
-                try:
-                    pct = int(p)/100
-                except:
-                    print("Valor inválido")
+
+        if cliente in grupo_zigg:
+            pct = 0.12
+        elif p == "":
+            try:
+                pct = int(porcentagem)/100
+            except:
+                pct = 0.2
+        else:
+            try:
+                pct = int(p)/100
+            except:
+                print("Valor inválido")
 
         if planilha == "0":
             parc = input("Parcelamento diferente: ")
@@ -659,13 +642,15 @@ def configuracoes():
 
         frete_tabelado = preco_tabelado(tabela, estado, cidade, valor_pedido)
 
-        
-        mod_frete, volumes, valor_cotacao = menu_inicial(transportadora, valor_nf, cidade, estado, planilha)
+        if planilha == "0":
+            mod_frete, volumes, valor_cotacao = menu_inicial(transportadora)
 
         if planilha == "1":
             mod_frete = pl.loc[pl['pedido']==pedido]['modalidade'].values[0]
             volumes = int(pl.loc[pl['pedido']==pedido]['volumes'].values[0])
             valor_cotacao = float(pl.loc[pl['pedido']==pedido]['cotacao'].values[0])
+            peso_bruto = float(pl.loc[pl['pedido']==pedido]['peso'].values[0])
+
 
         if mod_frete == "9" or mod_frete == 9:
             cod_transportadora = False
@@ -684,7 +669,7 @@ def configuracoes():
         if mod_frete == "0" and transportadora == "P/ SÃO PAULO":
             cod_transportadora = 10021638182
 
-        peso_bruto = float(pl.loc[pl['pedido']==pedido]['peso'].values[0])
+        
         if planilha == "0":
             if transportadora in ["EXCURSÃO: DAVID TURISMO (GASPAZINHO)", "TRANSPOTYGUAR"]:
                 peso_input = input("Digite o peso: ")
@@ -693,6 +678,11 @@ def configuracoes():
                 except:
                     print("Peso inválido.")
                     peso_bruto = 0
+            else:
+                peso_bruto = 0
+
+        if transportadora in ["CB EXPRESS", "EXPRESS FORTALEZA", "TRANSCEARA"]:
+            valor_cotacao = frete_diferente(transportadora, valor_nf, cidade, estado)
         
         sucesso = deleta_prenota(cod_integracao)
         painel_informativo(pedido, cliente, parcela, transportadora, frete_tabelado, valor_pedido, valor_nf, pct, tabela, mod_frete, volumes, valor_cotacao, frete_nota, destino, vendedor)
@@ -700,13 +690,20 @@ def configuracoes():
         pagina_cotacao = procura(pedido, titulo="COTACAO", source=cotacao_id)
         try:
             id_cotacao = pagina_cotacao.json()['results'][0]['id']
+            erro = False
         except:
-            print('entrou na excessao')
-            pagina_pedido = procura(pedido)
-            id_pedido = pagina_pedido.json()['results'][0]['id']
-            pagina_cotacao = cria_cotacao(pedido, id_pedido, frete_tabelado)
-            id_cotacao = pagina_cotacao.json()['id']
-        atualiza_cotacao(id=id_cotacao, valor_cotacao=valor_cotacao, pre_nota=True, nota_cheia=nota_cheia)
+            print(f'Cotação do pedido {pedido} não encontrada')
+            try:
+                pagina_pedido = procura(pedido)
+                id_pedido = pagina_pedido.json()['results'][0]['id']
+                pagina_cotacao = cria_cotacao(pedido, id_pedido, frete_tabelado)
+                id_cotacao = pagina_cotacao.json()['id']
+                # atualiza_cotacao(id=id_cotacao, valor_cotacao=valor_cotacao, pre_nota=True, nota_cheia=nota_cheia)
+            except:
+                print(f"Pedido {pedido} não existe no notion ainda")
+                erro = True
+        if not erro:
+            atualiza_cotacao(id=id_cotacao, valor_cotacao=valor_cotacao, pre_nota=True, nota_cheia=nota_cheia)
         print("Ajustando pré nota...")
         codigo_omie = (zip(df['codigos_omie'], df['Qtde.'], df['valor']))
         parametros = (cod_integracao, cod_cliente, cod_parcela, codigo_omie, cfop, cod_transportadora, mod_frete, volumes, frete_nota, num_pedido_mercos, sucesso, peso_bruto)

@@ -552,7 +552,7 @@ def atualiza_cotacao(id, data_cotacao=0, valor_cotacao=0, prazo=0, pre_nota=Fals
         print(atualizados.json())
     return atualizados
 
-def atualiza_dados_faturamento(id, dados_atualizados):
+def atualiza_dados_faturamento(id, dados_atualizados, volumes):
     url = f"https://api.notion.com/v1/pages/{id}"
     qtd_itens, qtd_total, valor_pedido, link_mercos, vendedor, time, transportadora, excursao = dados_atualizados
     payload = {
@@ -566,6 +566,10 @@ def atualiza_dados_faturamento(id, dados_atualizados):
                 "id": "wTpu",
                 "type":"number",
                 "number": int(qtd_total),
+            },
+            "VOLUMES": {
+                "type":"number",
+                "number": int(volumes),
             },
             "VALOR":{
                 "type":"number",

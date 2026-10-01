@@ -79,6 +79,8 @@ def selenium_esta_rodando():
     return False
 
 class Cliente():
+    grupo_zigg = ["ZIGG-ZAGG DISTRIBUIDORA - FILIAL", "ZIGG-ZAGG DISTRIBUIDORA", "BELA BIJU"]
+
     def __init__(self, numero_pedido_mercos):
         self.numero_pedido_mercos = numero_pedido_mercos
         self.fiscal = self.extrai_cnpj()
@@ -131,7 +133,8 @@ class Pedido():
             excursao = transportadora
         else:
             excursao = False
-    
+        # #informacoes_complementares > div > div > div:nth-child(2) > div:nth-child(3) > div > div.col-sm-4.label-titulo
+        # #informacoes_complementares > div > div > div:nth-child(2) #informacoes_complementares > div > div > div:nth-child(2)
         # essa variável se encontra no fim dessa div, quase no rodapé
         info_adicionais = soup.select_one("#informacoes_complementares > div > div > div.flex.col-sm-12.tpadded20 > div.label-valor").text
     
