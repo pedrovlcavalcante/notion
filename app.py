@@ -353,7 +353,7 @@ if st.session_state.cotacao_gerada and st.session_state.payload_cotacao:
                     with res5:
                         st.metric("Modal", modal)
                     if not avulso:
-                        atualiza_cotacao(id_cotacao, data_cotacao.isoformat(), valor_frete, prazo)
+                        atualiza_cotacao(id_cotacao, valor_frete)
                     else:
                         pass
                 else:

@@ -1,12 +1,14 @@
-import psutil, json
+import psutil
+import requests
+import os
+import base64
 import pandas as pd
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from notion import busca_cliente, cria_pedido, cria_cotacao, cria_bloco, equipe
 from datetime import datetime
-import requests
-import os
-import base64
+from pathlib import Path
+
 
 estados_brasil = {
     "Acre": "AC",
@@ -109,11 +111,14 @@ class Cliente():
 
 class Pedido():
     # a ideia aqui é essa ser a classe base para criar a pagina do pedido no Notion e criar a pre-nota também
-    def __init__(self, numero, link):
+    def __init__(self, numero, link, file_path=None):
         self.numero = numero
-        file_path = f"novos_pedidos\\{self.numero}.html"
+        if file_path is None:
+            self.file_path = Path("novos_pedidos") / f"{self.numero}.html"
+        else:
+            self.file_path = Path(file_path)
 
-        with open(file_path, "rb") as html_content:
+        with open(self.file_path, "rb") as html_content:
             soup = BeautifulSoup(html_content, "lxml")
 
         codigo_integracao_pedido = soup.select_one("#js-div-global > div.overlay > section > div.container-fluid > div.box.bordered.padded > div.padded.acoes_pedido.barra-acao > script").text.strip().split()[2]
@@ -141,32 +146,31 @@ class Pedido():
         # loop para encontrar a porcentagem da nota
         for child in outros_campos.find_all():
             texto_limpo = child.get_text(strip=True)
+            tem_cotacao_braspress = False
             if texto_limpo == "* TABELA DE ENVIO DE MERCADORIA":
                 # .find_next_sibling() pega o elemento irmão que vem logo depois dele
                 proximo_elemento = child.find_next_sibling()
                 if proximo_elemento:
                     porcentagem = proximo_elemento.get_text(strip=True)
-                    break
-    
-        # loop para encontar a tabela de preço           
-        for child in outros_campos.find_all():
-            texto_limpo = child.get_text(strip=True)
             if texto_limpo == "* TABELA USADA NO PEDIDO":
                 # .find_next_sibling() pega o elemento irmão que vem logo depois dele
                 texto_tabela = child.find_next_sibling()
                 if texto_tabela:
                     tabela_mercos = texto_tabela.get_text(strip=True)
-                    break
-    
-        # loop para encontrar a observação interna
-        for child in outros_campos.find_all():
-            texto_limpo = child.get_text(strip=True)
+
             if texto_limpo == "* Observação Interna":
                 # .find_next_sibling() pega o elemento irmão que vem logo depois dele
                 texto_observacao = child.find_next_sibling()
                 if texto_observacao:
-                    observacao = texto_observacao.get_text(strip=True)
-                    break
+                    observacao = texto_observacao.get_text(strip=True)                
+            if texto_limpo == "Cotação Braspress":
+                # .find_next_sibling() pega o elemento irmão que vem logo depois dele
+                texto_observacao = child.find_next_sibling()
+                if texto_observacao:
+                    str_ct_braspress = texto_observacao.get_text(strip=True).replace("R$ ", "").replace(",", ".")
+                    self.ct_braspress = float(str_ct_braspress)
+            if not tem_cotacao_braspress:
+                self.ct_braspress = 0
 
         boleto = False
         if ('/' in condicao_pagamento) or (condicao_pagamento in tipos_boleto):
@@ -252,10 +256,13 @@ class Pedido():
 
             if tabela[0] in tabela1:
                 grupo_tabela = "10"
+
             elif tabela[0] in tabela2:
                 grupo_tabela = "40"
+
             else:
                 grupo_tabela = None
+
 
             # Identifica a região correta no dicionário
             if estado == "CE":
@@ -278,9 +285,9 @@ class Pedido():
             # Varre as faixas para encontrar o preço correspondente
             for (minimo, maximo), preco in faixas.items():
                 if minimo <= valor_pedido <= maximo:
-                    # return preco
                     self.frete_tabelado = preco
-            return 0
+                else:
+                    self.frete_tabelado = 0
 
     def itens_fabrica(self):
         df = self.produtos

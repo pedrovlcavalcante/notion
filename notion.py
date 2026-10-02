@@ -521,22 +521,23 @@ def seta_nf(id, nf):
         print(atualizados.json())
     return atualizados
 
-def atualiza_cotacao(id, data_cotacao=0, valor_cotacao=0, prazo=0, pre_nota=False, nota_cheia=False):
+def atualiza_cotacao(id, valor_cotacao=0, pre_nota=False, nota_cheia=False, ct_braspress=0):
     url = f"https://api.notion.com/v1/pages/{id}"
 
     if not pre_nota:
         payload = {
             "properties":{
-                "DATA COTAÇÃO BRASPRESS":{"date":{"start":f"{data_cotacao}"}},
+                # "DATA COTAÇÃO BRASPRESS":{"date":{"start":f"{data_cotacao}"}},
                 "COTAÇÃO BRASPRESS":{"number":valor_cotacao},
-                "PRAZO BRASPRESS":{"number":prazo},
+                # "PRAZO BRASPRESS":{"number":prazo},
             }
         }
     else:
         payload = {
             "properties":{
                 "FRETE TOTAL":{"number":valor_cotacao},
-                "NOTA CHEIA":{"checkbox":nota_cheia}
+                "NOTA CHEIA":{"checkbox":nota_cheia},
+                "COTAÇÃO BRASPRESS":{"number":ct_braspress}
             }
         }
     headers = {

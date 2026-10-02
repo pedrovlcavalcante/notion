@@ -71,7 +71,6 @@ graph LR
 * [x]  Modelagem e implementação da classe `Cliente`.
 * [x]  Modelagem e implementação da classe `Pedido`.
 * [ ]  Encapsulamento das regras de integração e comunicação com APIs dentro de módulos e classes dedicadas.
-* [ ]  Integração com a plataforma Melhor Envio.
 * [ ]  Implementação de interface gráfica
 
 

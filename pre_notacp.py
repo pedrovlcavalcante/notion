@@ -37,7 +37,8 @@ class PreNota(Pedido):
 
     def __init__(self, numero, link=None):
         # Inicializa todos os atributos da classe pai (Pedido)
-        super().__init__(numero, link)
+        caminho_novo = Path("pedidos") / f"{numero}.html"
+        super().__init__(numero, link, file_path=caminho_novo)
 
         # Atributos específicos do faturamento / Omie
         self.cnpj_cpf = None
@@ -45,7 +46,7 @@ class PreNota(Pedido):
         self.cod_parcela = None
         self.cod_transportadora = None
         self.cfop = None
-        self.file_path = Path("pedidos") / f"{numero}.html"
+        self.file_path_prenota = Path("pedidos") / f"{numero}.html"
 
         # Atributos ajustados de faturamento
         self.pct_faturamento = 0.20
@@ -110,10 +111,10 @@ class PreNota(Pedido):
 
     def _extrai_dados_adicionais_html(self):
         """Extrai CNPJ/CPF do cliente a partir do HTML salvo se não disponível."""
-        if not self.file_path.exists():
+        if not self.file_path_prenota.exists():
             return
 
-        with open(self.file_path, "rb") as file:
+        with open(self.file_path_prenota, "rb") as file:
             soup = BeautifulSoup(file, "lxml")
 
         elem_cnpj = soup.select_one(
@@ -124,26 +125,6 @@ class PreNota(Pedido):
                 strip=True, separator=" "
             ).split(" ")
             self.cnpj_cpf = lista_cnpj[1] if len(lista_cnpj) > 1 else lista_cnpj[0]
-        # porcentagem = soup.select_one("#informacoes_complementares > div > div > div:nth-child(2)")
-        # info_adicionais = soup.select_one("#informacoes_complementares > div > div > div.flex.col-sm-12.tpadded20 > div.label-valor").text
-        # vendedor = soup.select_one('#informacoes_complementares > div > div > div:nth-child(1) > div:nth-child(4) > div > div.col-sm-8.label-valor').text
-        # for child in porcentagem.find_all():
-        #     texto_limpo = child.get_text(strip=True)
-        #     if texto_limpo == "* TABELA DE ENVIO DE MERCADORIA":
-        #         # .find_next_sibling() pega o elemento irmão que vem logo depois dele
-        #         proximo_elemento = child.find_next_sibling()
-        #         if proximo_elemento:
-        #             pct = proximo_elemento.get_text(strip=True)
-        #     if texto_limpo == "* TABELA USADA NO PEDIDO":
-        #         # .find_next_sibling() pega o elemento irmão que vem logo depois dele
-        #         texto_tabela = child.find_next_sibling()
-        #         if texto_tabela:
-        #             tabela = texto_tabela.get_text(strip=True)
-        #     if texto_limpo == "* Observação Interna":
-        #         # .find_next_sibling() pega o elemento irmão que vem logo depois dele
-        #         texto_observacao = child.find_next_sibling()
-        #         if texto_observacao:
-        #             observacao = texto_observacao.get_text(strip=True)
 
     # -------------------------------------------------------------------------
     # Mapeamentos de Códigos (JSONs Locais)
@@ -350,6 +331,24 @@ class PreNota(Pedido):
             time.sleep(60)
             return self.enviar_prenota_omie(tentativa=tentativa + 1)
 
+    def _calcular_frete_especial(self):
+        cidade = self.cliente.cidade.upper() if self.cliente.cidade else ""
+        estado = self.cliente.estado
+
+        if self.transportadora == "CB EXPRESS":
+            return max(0.045 * self.valor_nf, 50.0)
+        elif self.transportadora == "EXPRESS FORTALEZA":
+            return max(0.045 * self.valor_nf, 33.0)
+        elif self.transportadora == "TRANSCEARA":
+            if estado == "PI":
+                return max(0.10 * self.valor_nf, 115.70) if cidade == "TERESINA" else max(0.12 * self.valor_nf, 130.0)
+            elif estado == "MA":
+                return max(0.13 * self.valor_nf, 141.0) if cidade in ["SÃO LUIS", "SAO LUIS"] else max(0.15 * self.valor_nf, 163.44)
+            elif estado == "PA":
+                return max(0.16 * self.valor_nf, 184.62)
+            elif estado == "PE":
+                return max(0.12 * self.valor_nf, 130.43)
+        return 0.0
     # -------------------------------------------------------------------------
     # Regras de Negócio e Cálculos de Frete
     # -------------------------------------------------------------------------
@@ -394,25 +393,6 @@ class PreNota(Pedido):
         if self.mod_frete == "0" and self.transportadora == "P/ SÃO PAULO":
             self.cod_transportadora = 10021638182
 
-    def _calcular_frete_especial(self):
-        cidade = self.cliente.cidade.upper() if self.cliente.cidade else ""
-        estado = self.cliente.estado
-
-        if self.transportadora == "CB EXPRESS":
-            return max(0.045 * self.valor_nf, 50.0)
-        elif self.transportadora == "EXPRESS FORTALEZA":
-            return max(0.045 * self.valor_nf, 33.0)
-        elif self.transportadora == "TRANSCEARA":
-            if estado == "PI":
-                return max(0.10 * self.valor_nf, 115.70) if cidade == "TERESINA" else max(0.12 * self.valor_nf, 130.0)
-            elif estado == "MA":
-                return max(0.13 * self.valor_nf, 141.0) if cidade in ["SÃO LUIS", "SAO LUIS"] else max(0.15 * self.valor_nf, 163.44)
-            elif estado == "PA":
-                return max(0.16 * self.valor_nf, 184.62)
-            elif estado == "PE":
-                return max(0.12 * self.valor_nf, 130.43)
-        return 0.0
-
     # -------------------------------------------------------------------------
     # Notion e Exibição
     # -------------------------------------------------------------------------
@@ -433,11 +413,14 @@ class PreNota(Pedido):
                 print(f"Erro ao vincular pedido no Notion: {e}")
                 return False
 
+        if self.ct_braspress == 0.0 and self.transportadora == 'BRASPRESS':
+            self.ct_braspress = self.valor_cotacao
         atualiza_cotacao(
             id=id_cotacao,
             valor_cotacao=self.valor_cotacao,
             pre_nota=True,
             nota_cheia=(self.pct_faturamento == 1.0),
+            ct_braspress=self.ct_braspress
         )
         return True
 
@@ -464,12 +447,3 @@ class PreNota(Pedido):
         print(f" {'Valor NF:':<18} R$ {self.valor_nf:,.2f}")
         print(f" {'Porcentagem:':<18} {self.pct_faturamento * 100:.1f}%")
         print("=" * 50)
-
-# if __name__=='__main__':
-#     prenota = PreNota(16377)
-#     prenota.extrai_produtos()
-#     prenota.calcula_frete_tabelado()
-#     prenota.itens_fabrica()
-#     prenota.exibir_painel_informativo()
-#     prenota.deletar_prenota_omie()
-#     prenota.calcular_ajustes_faturamento()
