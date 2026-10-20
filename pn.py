@@ -79,19 +79,17 @@ def interagir_com_usuario():
     print(f"✓ Cliente: {pedido.cliente.nome}")
     print(f"✓ Destino: {pedido.cliente.cidade}/{pedido.cliente.estado}")
     print(f"✓ Valor Original do Pedido: R$ {pedido.valor_pedido:,.2f}")
+    print(f"✓ Condição de Pagamento: R$ {pedido.condicao_pagamento}")
     print(f"✓ Tabela Mercos: {pedido.tabela_mercos}")
     print(f"✓ Porcentagem: {pedido.porcentagem}%")
     print(f"✓ Transportadora: {pedido.transportadora}")
+    print(f"✓ Cotação Braspress: R$ {pedido.ct_braspress:,.2f}")
     print(f"✓ Frete Tabelado: R$ {pedido.frete_tabelado:,.2f}")
     print(f"✓ Frete a Pagar: R$ {pedido.frete_nota:,.2f}")
     print(f"✓ Vendedor: {pedido.vendedor}")
     print(f"✓ Observação Interna: {pedido.observacao_interna}")
     print(f"✓ Informações adicionais: {pedido.informacoes_adicionais}")
 
-    # 4. Mapeamento de Códigos (Cliente, Transportadora, Produtos)
-    # Se faltar algum produto substituto, o próprio método solicita via input
-    print("\n[+] Mapeando códigos com Omie...")
-    pedido.mapear_codigos_locais()
 
     # 5. Coleta de Informações de Faturamento e Frete
     print("\n" + "-" * 50)
@@ -102,6 +100,11 @@ def interagir_com_usuario():
     pct_padrao = pedido.porcentagem if pedido.porcentagem else "20"
     pct_input = input(
         f"• Porcentagem de nota (%)[Padrão: {pct_padrao}%]: "
+    ).strip()
+
+    cond_pgmt_padrao = pedido.condicao_pagamento if pedido.condicao_pagamento else ""
+    cond_pgmt_input = input(
+        f"• Condição de pagamento [Padrão: {cond_pgmt_padrao}]: "
     ).strip()
 
     # Modalidade de frete
@@ -130,7 +133,7 @@ def interagir_com_usuario():
         )
         valor_cotacao = float(v_cot) if v_cot else 0.0
 
-
+    if pedido.transportadora in ["EXCURSÃO: DAVID TURISMO (GASPAZINHO)", "TRANSPOTYGUAR", "CORREIOS"]:
         v_peso = (
             input("• Peso Bruto em Kg [Padrão 0.0]: ")
             .strip()
@@ -138,14 +141,23 @@ def interagir_com_usuario():
         )
         peso_bruto = float(v_peso) if v_peso else 0.0
 
+
+
     # 6. Aplicação de Regras de Negócio e Cálculos
     pedido.calcular_ajustes_faturamento(
         pct_input=pct_input,
+        cond_pgmt_input=cond_pgmt_input,
         mod_frete=mod_frete,
         volumes=volumes,
         valor_cotacao=valor_cotacao,
         peso_bruto=peso_bruto,
     )
+
+    # 4. Mapeamento de Códigos (Cliente, Transportadora, Produtos)
+    # Se faltar algum produto substituto, o próprio método solicita via input
+    print("\n[+] Mapeando códigos com Omie...")
+    pedido.mapear_codigos_locais()
+
     # 7. Exibição do Resumo
     print("\n")
     pedido.exibir_painel_informativo()
@@ -163,6 +175,9 @@ def interagir_com_usuario():
         print("\n[+] Deletando pré-nota anterior no Omie (caso exista)...")
         pedido.deletar_prenota_omie()
 
+        if mod_frete == "9":
+            pedido.cod_transportadora = False
+            
         print("[+] Cadastrando/Enviando nova pré-nota para a Omie...")
         if pedido.enviar_prenota_omie():
             print("[+] Sincronizando dados com o Notion...")

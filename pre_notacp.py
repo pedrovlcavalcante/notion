@@ -66,7 +66,7 @@ class PreNota(Pedido):
     # -------------------------------------------------------------------------
 
     @classmethod
-    def baixar_html_mercus(cls, numero_pedido):
+    def baixar_html_mercus(cls, numero_pedido, file_path=None):
         """Baixa o HTML do pedido via Selenium se ainda não existir localmente."""
         while selenium_esta_rodando():
             time.sleep(1)
@@ -100,10 +100,13 @@ class PreNota(Pedido):
                     == "complete"
                 )
 
-                path = Path("pedidos") / f"{numero_pedido}.html"
-                path.parent.mkdir(exist_ok=True)
-                with open(path, "w", encoding="utf-8") as file:
+                if not file_path:
+                    file_path = Path("pedidos") / f"{numero_pedido}.html"
+                else:
+                    file_path.parent.mkdir(exist_ok=True)
+                with open(file_path, "w", encoding="utf-8") as file:
                     file.write(driver.page_source)
+                print(f"Pedido {numero_pedido} baixado com sucesso.")
                 return True
             except Exception as e:
                 print(f"Erro ao salvar HTML do pedido {numero_pedido}: {e}")
@@ -353,7 +356,7 @@ class PreNota(Pedido):
     # Regras de Negócio e Cálculos de Frete
     # -------------------------------------------------------------------------
 
-    def calcular_ajustes_faturamento(self, pct_input="", mod_frete="9", volumes=1, valor_cotacao=0.0, peso_bruto=0.0):
+    def calcular_ajustes_faturamento(self, pct_input="", cond_pgmt_input="", mod_frete="9", volumes=1, valor_cotacao=0.0, peso_bruto=0.0):
         """Aplica percentuais de nota, modalidade de frete e regras específicas de transportadora."""
         # 1. Definição do Percentual
         if self.cliente.nome in self.GRUPO_ZIGG:
@@ -368,6 +371,9 @@ class PreNota(Pedido):
                 self.pct_faturamento = float(self.porcentagem) / 100.0 if self.porcentagem else 0.20
             except ValueError:
                 self.pct_faturamento = 0.20
+                
+        if cond_pgmt_input != "":
+            self.condicao_pagamento = cond_pgmt_input
 
         self.valor_nf = self.valor_pedido * self.pct_faturamento
         self.mod_frete = str(mod_frete)
@@ -391,8 +397,8 @@ class PreNota(Pedido):
             self.frete_nota = self.valor_cotacao if (self.valor_cotacao < self.frete_tabelado or self.valor_pedido < 2000) else self.frete_tabelado
 
         if self.mod_frete == "0" and self.transportadora == "P/ SÃO PAULO":
-            self.cod_transportadora = 10021638182
-
+            self.cod_transportadora = 10075477230
+            
     # -------------------------------------------------------------------------
     # Notion e Exibição
     # -------------------------------------------------------------------------

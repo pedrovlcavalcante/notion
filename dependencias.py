@@ -83,11 +83,11 @@ def selenium_esta_rodando():
 class Cliente():
     grupo_zigg = ["ZIGG-ZAGG DISTRIBUIDORA - FILIAL", "ZIGG-ZAGG DISTRIBUIDORA", "BELA BIJU"]
 
-    def __init__(self, numero_pedido_mercos):
+    def __init__(self, numero_pedido_mercos, file_path=None):
         self.numero_pedido_mercos = numero_pedido_mercos
+        self.file_path = file_path if file_path else f"novos_pedidos\\{self.numero_pedido_mercos}.html"
         self.fiscal = self.extrai_cnpj()
         notion = busca_cliente(self.fiscal)
-        # print(notion)
         busca = notion['results'][0]
         self.codigo_integracao_cliente = busca['properties']['CODIGO OMIE']['number']
         self.cep = busca['properties']['CEP']['rich_text'][0]['text']['content']
@@ -98,8 +98,7 @@ class Cliente():
         self.id_notion = busca['id']
 
     def extrai_cnpj(self):
-        file_path = f"novos_pedidos\\{self.numero_pedido_mercos}.html"
-        with open(file_path, "rb") as html_content:
+        with open(self.file_path, "rb") as html_content:
             soup = BeautifulSoup(html_content, "lxml")
         lista_cnpj_cpf = soup.select_one("#selecionado_autocomplete_id_codigo_cliente > span > div > div:nth-child(1) > div:nth-child(1) > h5 > small:nth-child(3)").get_text(strip=True, separator=" ").split(" ")
 
@@ -110,13 +109,12 @@ class Cliente():
         return cnpj_cpf
 
 class Pedido():
-    # a ideia aqui é essa ser a classe base para criar a pagina do pedido no Notion e criar a pre-nota também
     def __init__(self, numero, link, file_path=None):
         self.numero = numero
         if file_path is None:
             self.file_path = Path("novos_pedidos") / f"{self.numero}.html"
         else:
-            self.file_path = Path(file_path)
+            self.file_path = file_path
 
         with open(self.file_path, "rb") as html_content:
             soup = BeautifulSoup(html_content, "lxml")
@@ -133,11 +131,13 @@ class Pedido():
         outros_campos = soup.select_one("#informacoes_complementares > div > div > div:nth-child(2)")
     
         #3ª coluna
-        transportadora = soup.select_one("#informacoes_complementares > div > div > div:nth-child(3) > div:nth-child(2) > div > div.col-sm-8.label-valor").text
-        if ':' in  transportadora:
-            excursao = transportadora
+        transportadora_texto = soup.select_one("#informacoes_complementares > div > div > div:nth-child(3) > div:nth-child(2) > div > div.col-sm-8.label-valor").text
+        if ':' in  transportadora_texto:
+            excursao = transportadora_texto
+            transportadora = transportadora_texto
         else:
             excursao = False
+            transportadora = transportadora_texto
         # #informacoes_complementares > div > div > div:nth-child(2) > div:nth-child(3) > div > div.col-sm-4.label-titulo
         # #informacoes_complementares > div > div > div:nth-child(2) #informacoes_complementares > div > div > div:nth-child(2)
         # essa variável se encontra no fim dessa div, quase no rodapé
@@ -162,12 +162,13 @@ class Pedido():
                 # .find_next_sibling() pega o elemento irmão que vem logo depois dele
                 texto_observacao = child.find_next_sibling()
                 if texto_observacao:
-                    observacao = texto_observacao.get_text(strip=True)                
+                    observacao = texto_observacao.get_text(strip=True)          
+                          
             if texto_limpo == "Cotação Braspress":
                 # .find_next_sibling() pega o elemento irmão que vem logo depois dele
                 texto_observacao = child.find_next_sibling()
                 if texto_observacao:
-                    str_ct_braspress = texto_observacao.get_text(strip=True).replace("R$ ", "").replace(",", ".")
+                    str_ct_braspress = texto_observacao.get_text(strip=True).replace("R$", "").replace(",", ".").strip()
                     self.ct_braspress = float(str_ct_braspress)
             if not tem_cotacao_braspress:
                 self.ct_braspress = 0
@@ -176,7 +177,7 @@ class Pedido():
         if ('/' in condicao_pagamento) or (condicao_pagamento in tipos_boleto):
             boleto = True
 
-        self.cliente = Cliente(self.numero)
+        self.cliente = Cliente(self.numero, self.file_path)
         self.vendedor = vendedor
         self.time = equipe(self.vendedor)
         self.data_pedido = data_pedido
@@ -203,9 +204,8 @@ class Pedido():
         self.page_id = None
 
     def extrai_produtos(self):
-        file_path = f"novos_pedidos\\{self.numero}.html"
         df = pd.read_html(
-                file_path, attrs={"id": "tabela_itens_pedido"}
+                self.file_path, attrs={"id": "tabela_itens_pedido"}
             )[0].drop(columns=["Foto", "Desc. Acrés.", "Preço Tab."]).drop_duplicates(keep=False)
         
         df = df[~df['Código'].str.startswith('Observações:', na=False)]
@@ -270,6 +270,7 @@ class Pedido():
                 faixas = regras_preco.get(regra_regiao, {})
                 for (minimo, maximo), preco in faixas.items():
                     if minimo <= valor_pedido <= maximo:
+                        self.frete_tabelado = preco
                         return preco
                 # grupo_tabela = "todas"  # CE ignora o tipo de tabela nas suas regras
             elif estado in nordeste:
@@ -282,10 +283,12 @@ class Pedido():
             # Busca as faixas de valores baseadas na região e tabela detectadas
             faixas = regras_preco.get(regra_regiao, {}).get(grupo_tabela, {})
 
+            # CRIAR LOGICA PARA SE O FRETE NÃO FOR BRASPRESS 
             # Varre as faixas para encontrar o preço correspondente
             for (minimo, maximo), preco in faixas.items():
                 if minimo <= valor_pedido <= maximo:
                     self.frete_tabelado = preco
+                    break
                 else:
                     self.frete_tabelado = 0
 

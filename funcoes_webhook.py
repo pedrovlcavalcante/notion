@@ -25,6 +25,10 @@ def dados_atualizados_pedido(driver):
     transportadora = driver.find_element(By.XPATH, '//*[@id="informacoes_complementares"]/div/div/div[3]/div[2]/div/div[2]').text
     link_mercos = driver.current_url
     vendedor = driver.find_element(By.XPATH, '//*[@id="informacoes_complementares"]/div/div/div[1]/div[4]/div/div[2]').text
+    try:
+        cot_braspress = float(driver.find_element(By.XPATH, '//*[@id="informacoes_complementares"]/div/div/div[2]/div[3]/div/div[2]').text.replace('.','').replace(',','.'))
+    except:
+        cot_braspress = 0
     time = equipe(vendedor)
     valor_separado = valor_pedido.split()[1].replace('.','').replace(',','.')
     decimal = Decimal(valor_separado)
@@ -34,7 +38,7 @@ def dados_atualizados_pedido(driver):
         excursao = transportadora
         t = transportadora.split(":")[0]
         transportadora = t
-    return (qtd_itens, qtd_total, valor_ajustado, link_mercos, vendedor, time, transportadora, excursao)
+    return (qtd_itens, qtd_total, valor_ajustado, link_mercos, vendedor, time, transportadora, excursao, cot_braspress)
 
 def download_danfe(danfe_url, numero_nf, pedido):
     url = danfe_url
@@ -241,11 +245,18 @@ def processar_dados_webhook(dados):
         
         print("Caminho: ", file_path)
         print("Modalidade: ", mod_frete)
+        print("Transportadora: ", transportadora)
         print("Pedido: ", pedido, " - NF: ", numero_nf)
         
-        if mod_frete == '0' or transportadora.startswith('EXCURSÃO'):
-            imprime_nf(file_path)
-            print(f"Processo de impresssão do pedido {pedido}!")
+        if mod_frete in ['0', '1']:
+            if mod_frete == '0':
+                imprime_nf(file_path)
+                imprime_nf(file_path)
+            if (transportadora == 'CORREIOS') or (transportadora.startswith("EXCURSÃO")):
+                print(f"Impressão {transportadora}")
+                imprime_nf(file_path)
+                imprime_nf(file_path)
+            print(f"Processo de impresssão do pedido {pedido} - NF: {numero_nf}!")
             
         # O upload via Selenium que consome tempo roda isolado aqui
         # upload_danfe(file=file_path, pedido=pedido)

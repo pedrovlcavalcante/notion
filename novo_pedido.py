@@ -41,8 +41,14 @@ def busca_pedidos(driver):
     EC.presence_of_element_located((By.ID, 'componente-de-tabela-2'))
 )
     linhas = driver.find_elements(By.XPATH, '//*[@id="componente-de-tabela-2"]/table/tbody/tr')
+    pedidos_existentes_periodo = len(linhas)
+    print("Pedidos encontrados: ", pedidos_existentes_periodo - 1)
     for linha in linhas:
-        pedido_mercos = linha.find_element(By.TAG_NAME, "a")
+        try:
+            pedido_mercos = linha.find_element(By.TAG_NAME, "a")
+        except:
+            print("Sem pedidos para lançar")
+            break
         numero_pedido_mercos = pedido_mercos.text.replace("#","")
         pesquisa = procura(numero_pedido_mercos)
         link_mercos = driver.current_url

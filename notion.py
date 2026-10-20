@@ -555,7 +555,9 @@ def atualiza_cotacao(id, valor_cotacao=0, pre_nota=False, nota_cheia=False, ct_b
 
 def atualiza_dados_faturamento(id, dados_atualizados, volumes):
     url = f"https://api.notion.com/v1/pages/{id}"
-    qtd_itens, qtd_total, valor_pedido, link_mercos, vendedor, time, transportadora, excursao = dados_atualizados
+    qtd_itens, qtd_total, valor_pedido, link_mercos, vendedor, time, transportadora, excursao, cot_braspress = dados_atualizados
+    if ":" in transportadora:
+        transportadora = transportadora.split(":")[0]
     payload = {
         "properties":{
             "ITENS NO PEDIDO": {
@@ -608,8 +610,11 @@ def atualiza_dados_faturamento(id, dados_atualizados, volumes):
     if not excursao:
         payload["properties"].pop("EXCURSÃO")
     atualizados = requests.patch(url, headers=headers, json=payload)
+    
     if atualizados.status_code == 200:
         print(f"Pedido atualizado com sucesso")
+        id_cotacao = atualizados.json()['properties']['COTAÇÕES']['relation'][0]['id']
+        atualiza_cotacao(id_cotacao, cot_braspress)
     else:
         print(f"Não foi possível atualizar o Pedido")
         print(atualizados.json())
@@ -631,7 +636,10 @@ def id_pedido_notion(pedido, source=data_source_id):
 
     requisicao = requests.post(url, headers=headers, json=payload).json()['results'][0]
     id_pedido = requisicao['id']
-    transportadora = requisicao['properties']['TRANSPORTADORA']['select']['name']
+    try:
+        transportadora = requisicao['properties']['TRANSPORTADORA']['select']['name']
+    except:
+        transportadora = "SEM FRETE"
     return (id_pedido, transportadora)
 
 if __name__=="__main__":

@@ -224,7 +224,10 @@ __marimo__/
 
 # Pastas
 novos_pedidos
+dados_modelagem
 pedidos
+download_dados_modelagem.py
+teste.py
 
 # Outros
 cookies.pkl
